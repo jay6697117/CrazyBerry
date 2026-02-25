@@ -6,12 +6,16 @@
     <title>CrazyBerry</title>
     <style>
       :root {
-        --bg: #c9e8b2;
-        --panel: rgba(15, 22, 20, 0.72);
-        --panel-border: rgba(255, 255, 255, 0.22);
-        --text: #f7fff5;
-        --accent: #ffd54f;
-        --accent-2: #ff5a6b;
+        --sky-a: #f8f0c4;
+        --sky-b: #dbf1b7;
+        --hud-card: rgba(249, 247, 238, 0.95);
+        --hud-border: rgba(86, 66, 46, 0.14);
+        --hud-text: #3d2d20;
+        --hud-muted: #80624d;
+        --toolbar-bg: rgba(245, 235, 208, 0.92);
+        --toolbar-border: rgba(103, 74, 36, 0.18);
+        --slot-bg: #f6f0de;
+        --slot-active: #f9cd67;
       }
 
       * {
@@ -24,8 +28,9 @@
         width: 100%;
         height: 100%;
         overflow: hidden;
-        font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
-        background: radial-gradient(circle at 20% 20%, #e8f8d6, var(--bg));
+        background: radial-gradient(circle at 18% 20%, var(--sky-a), var(--sky-b));
+        color: var(--hud-text);
+        font-family: 'Avenir Next', 'Trebuchet MS', 'Segoe UI', sans-serif;
       }
 
       #app {
@@ -42,22 +47,100 @@
 
       #hud {
         position: absolute;
-        top: 14px;
-        left: 14px;
-        right: 14px;
+        top: 18px;
+        left: 18px;
+        right: 18px;
         display: flex;
         justify-content: space-between;
+        align-items: flex-start;
         pointer-events: none;
       }
 
-      .panel {
-        background: var(--panel);
-        color: var(--text);
-        border: 1px solid var(--panel-border);
-        border-radius: 12px;
-        padding: 8px 12px;
-        min-width: 140px;
-        backdrop-filter: blur(6px);
+      .hud-stack {
+        display: grid;
+        gap: 10px;
+      }
+
+      .hud-day-pill,
+      .hud-economy,
+      .hud-time-card {
+        background: var(--hud-card);
+        border: 1px solid var(--hud-border);
+        border-radius: 16px;
+        box-shadow: 0 8px 22px rgba(43, 29, 11, 0.12);
+      }
+
+      .hud-day-pill {
+        width: 120px;
+        text-align: center;
+        font-weight: 700;
+        font-size: 16px;
+        padding: 8px 10px;
+      }
+
+      .hud-time-card {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        min-width: 210px;
+      }
+
+      .hud-time-main {
+        display: grid;
+        gap: 2px;
+      }
+
+      [data-testid='hud-clock'] {
+        font-size: 30px;
+        line-height: 1;
+        font-weight: 700;
+      }
+
+      [data-testid='hud-phase'] {
+        font-size: 13px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--hud-muted);
+      }
+
+      [data-testid='hud-weather'] {
+        font-size: 30px;
+      }
+
+      .hud-economy {
+        padding: 10px 12px;
+        min-width: 160px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .hud-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: 700;
+      }
+
+      .hud-row span {
+        color: var(--hud-muted);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      #hint {
+        position: absolute;
+        left: 50%;
+        bottom: 104px;
+        transform: translateX(-50%);
+        background: rgba(253, 250, 238, 0.92);
+        border: 1px solid rgba(99, 77, 47, 0.15);
+        color: #4b3525;
+        border-radius: 999px;
+        padding: 8px 14px;
+        font-size: 13px;
+        box-shadow: 0 5px 15px rgba(43, 29, 11, 0.14);
       }
 
       #toolbar {
@@ -65,41 +148,51 @@
         left: 50%;
         bottom: 16px;
         transform: translateX(-50%);
-        display: flex;
-        gap: 8px;
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, auto));
         align-items: center;
-        background: var(--panel);
-        border: 1px solid var(--panel-border);
-        border-radius: 14px;
-        padding: 8px;
+        gap: 8px;
+        padding: 10px;
+        background: var(--toolbar-bg);
+        border: 1px solid var(--toolbar-border);
+        border-radius: 18px;
+        box-shadow: 0 10px 24px rgba(73, 50, 14, 0.2);
       }
 
-      [data-tool],
-      #open-shop,
-      [data-shop-action] {
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 10px;
-        background: rgba(255, 255, 255, 0.08);
-        color: var(--text);
-        padding: 6px 10px;
+      .tool-slot,
+      #open-shop {
+        position: relative;
+        width: 56px;
+        height: 56px;
+        border: 1px solid rgba(115, 80, 41, 0.22);
+        border-radius: 14px;
+        background: var(--slot-bg);
+        color: #4d3626;
+        font-size: 24px;
         cursor: pointer;
       }
 
-      [data-tool][data-active='true'] {
-        border-color: var(--accent);
-        box-shadow: 0 0 0 2px rgba(255, 213, 79, 0.35);
+      .tool-slot[data-active='true'] {
+        background: linear-gradient(180deg, #ffe7af, var(--slot-active));
+        border-color: rgba(154, 95, 31, 0.38);
       }
 
-      #hint {
+      .tool-count {
         position: absolute;
-        left: 50%;
-        bottom: 86px;
-        transform: translateX(-50%);
-        color: #173124;
-        background: rgba(255, 255, 255, 0.78);
-        padding: 6px 10px;
-        border-radius: 10px;
-        font-size: 13px;
+        right: 6px;
+        bottom: 4px;
+        font-size: 11px;
+        font-weight: 700;
+        color: #785024;
+      }
+
+      [data-testid='toolbar-active'] {
+        grid-column: 1 / -1;
+        justify-self: center;
+        margin-top: -2px;
+        font-size: 12px;
+        font-weight: 700;
+        color: #654933;
       }
 
       #shop-modal {
@@ -108,9 +201,9 @@
         left: 50%;
         transform: translate(-50%, -50%);
         width: min(560px, calc(100vw - 24px));
-        border: 1px solid var(--panel-border);
-        background: rgba(19, 27, 24, 0.95);
-        color: var(--text);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: rgba(25, 34, 28, 0.95);
+        color: #f5f9f4;
         border-radius: 14px;
         padding: 14px;
         display: none;
@@ -134,12 +227,51 @@
       }
 
       .shop-card {
-        border: 1px solid rgba(255, 255, 255, 0.15);
+        border: 1px solid rgba(255, 255, 255, 0.16);
         border-radius: 10px;
         padding: 10px;
       }
 
+      [data-shop-action] {
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 9px;
+        background: rgba(255, 255, 255, 0.08);
+        color: #f5f9f4;
+        padding: 6px 8px;
+        margin-right: 6px;
+        margin-bottom: 6px;
+        cursor: pointer;
+      }
+
+      @media (max-width: 900px) {
+        #hud {
+          top: 12px;
+          left: 12px;
+          right: 12px;
+        }
+
+        .hud-time-card {
+          min-width: 186px;
+        }
+
+        [data-testid='hud-clock'] {
+          font-size: 24px;
+        }
+
+        .tool-slot,
+        #open-shop {
+          width: 48px;
+          height: 48px;
+          font-size: 20px;
+        }
+      }
+
       @media (max-width: 700px) {
+        #toolbar {
+          grid-template-columns: repeat(4, minmax(0, auto));
+          gap: 6px;
+        }
+
         .shop-grid {
           grid-template-columns: 1fr;
         }
@@ -151,25 +283,38 @@
       <canvas id="game-canvas"></canvas>
 
       <div id="hud">
-        <div class="panel">
-          <div data-testid="hud-day">Day 1</div>
-          <div data-testid="hud-phase">Morning</div>
+        <div class="hud-stack">
+          <div class="hud-day-pill" data-testid="hud-day">Day 1</div>
+          <div class="hud-time-card">
+            <div class="hud-time-main">
+              <div data-testid="hud-clock">06:00 am</div>
+              <div data-testid="hud-phase">Morning</div>
+            </div>
+            <div data-testid="hud-weather">☀️</div>
+          </div>
         </div>
-        <div class="panel">
-          <div data-testid="hud-coins">100</div>
-          <div data-testid="hud-strawberry">0</div>
+
+        <div class="hud-stack">
+          <div class="hud-economy">
+            <div class="hud-row"><span>Coins</span><strong data-testid="hud-coins">100</strong></div>
+            <div class="hud-row"><span>Strawberry</span><strong data-testid="hud-strawberry">0</strong></div>
+          </div>
         </div>
       </div>
 
       <div id="hint" data-testid="hud-hint">WASD move, SPACE act, click tile</div>
 
       <div id="toolbar">
-        <button data-testid="tool-hoe" data-tool="hoe" data-active="false">🪓</button>
-        <button data-testid="tool-seed" data-tool="seed" data-active="false">🌰</button>
-        <button data-testid="tool-water" data-tool="water" data-active="false">💧</button>
-        <button data-testid="tool-hand" data-tool="hand" data-active="false">✋</button>
-        <button data-testid="tool-shovel" data-tool="shovel" data-active="false">🧹</button>
+        <button class="tool-slot" data-testid="tool-hoe" data-tool="hoe" data-active="false">🪓</button>
+        <button class="tool-slot" data-testid="tool-seed" data-tool="seed" data-active="false">
+          🌰
+          <span class="tool-count" data-testid="toolbar-seeds">0</span>
+        </button>
+        <button class="tool-slot" data-testid="tool-water" data-tool="water" data-active="false">💧</button>
+        <button class="tool-slot" data-testid="tool-hand" data-tool="hand" data-active="false">✋</button>
+        <button class="tool-slot" data-testid="tool-shovel" data-tool="shovel" data-active="false">🧹</button>
         <button id="open-shop" data-testid="open-shop">🛒</button>
+        <div data-testid="toolbar-active">Tool: auto</div>
       </div>
 
       <section id="shop-modal" data-testid="shop-modal" data-open="false">

@@ -1,5 +1,17 @@
+import { STRAWBERRY_STAGE } from '../entities/Strawberry.js';
 import { GRID_MAX_ROWS } from '../utils/Constants.js';
-import { createCropInstancedMesh, createTileInstancedMesh } from './Models.js';
+import {
+  createFlowerInstancedMesh,
+  createFruitInstancedMesh,
+  createGrowthInstancedMesh,
+  createReadyIndicatorMesh,
+  createSeedInstancedMesh,
+  createSoonIndicatorMesh,
+  createSproutInstancedMesh,
+  createTileInstancedMesh,
+  createWaterIndicatorMesh,
+  createWitheredInstancedMesh
+} from './Models.js';
 
 export function tileIndex(row, col, cols) {
   return row * cols + col;
@@ -10,14 +22,32 @@ const TILE_COLORS = {
   tilled: 0x7a4f2f
 };
 
-const CROP_STAGE_COLORS = {
-  1: 0xa09f4f,
-  2: 0x6dbb5b,
-  3: 0x43a447,
-  4: 0xf7f0d4,
-  5: 0xc81d3b,
-  withered: 0x5a5348
+const STAGE_SCALE = {
+  seed: 1,
+  sprout: 1,
+  growth: 1,
+  flower: 1,
+  fruit: 1,
+  withered: 1
 };
+
+const STAGE_Y = {
+  seed: 0.14,
+  sprout: 0.23,
+  growth: 0.35,
+  flower: 0.48,
+  fruit: 0.49,
+  withered: 0.35
+};
+
+function cropStageToKey(crop) {
+  if (crop.isWithered) return 'withered';
+  if (crop.stage === STRAWBERRY_STAGE.SEED) return 'seed';
+  if (crop.stage === STRAWBERRY_STAGE.SPROUT) return 'sprout';
+  if (crop.stage === STRAWBERRY_STAGE.GROWTH) return 'growth';
+  if (crop.stage === STRAWBERRY_STAGE.FLOWER) return 'flower';
+  return 'fruit';
+}
 
 export class FieldRenderer {
   constructor({ THREE, scene, gridSystem, cropSystem }) {
@@ -27,24 +57,46 @@ export class FieldRenderer {
     this.cropSystem = cropSystem;
 
     this.maxCount = GRID_MAX_ROWS * this.gridSystem.cols;
+
     this.tileMesh = createTileInstancedMesh(THREE, this.maxCount);
-    this.cropMesh = createCropInstancedMesh(THREE, this.maxCount);
 
-    this.tileMesh.count = this.gridSystem.rows * this.gridSystem.cols;
-    this.cropMesh.count = this.gridSystem.rows * this.gridSystem.cols;
+    this.stageMeshes = {
+      seed: createSeedInstancedMesh(THREE, this.maxCount),
+      sprout: createSproutInstancedMesh(THREE, this.maxCount),
+      growth: createGrowthInstancedMesh(THREE, this.maxCount),
+      flower: createFlowerInstancedMesh(THREE, this.maxCount),
+      fruit: createFruitInstancedMesh(THREE, this.maxCount),
+      withered: createWitheredInstancedMesh(THREE, this.maxCount)
+    };
 
-    this.scene.add(this.tileMesh, this.cropMesh);
+    this.indicatorMeshes = {
+      water: createWaterIndicatorMesh(THREE, this.maxCount),
+      soon: createSoonIndicatorMesh(THREE, this.maxCount),
+      ready: createReadyIndicatorMesh(THREE, this.maxCount)
+    };
+
+    this.scene.add(this.tileMesh);
+    for (const mesh of Object.values(this.stageMeshes)) {
+      this.scene.add(mesh);
+    }
+    for (const mesh of Object.values(this.indicatorMeshes)) {
+      this.scene.add(mesh);
+    }
 
     this.dummy = new THREE.Object3D();
     this.tileColor = new THREE.Color();
-    this.cropColor = new THREE.Color();
   }
 
   refreshAll() {
+    this.refreshTiles();
+    this.refreshCropStages();
+    this.refreshTileIndicators();
+  }
+
+  refreshTiles() {
     const { rows, cols } = this.gridSystem;
     const activeCount = rows * cols;
     this.tileMesh.count = activeCount;
-    this.cropMesh.count = activeCount;
 
     for (let row = 0; row < rows; row += 1) {
       for (let col = 0; col < cols; col += 1) {
@@ -60,31 +112,86 @@ export class FieldRenderer {
 
         this.tileColor.setHex(TILE_COLORS[tile.soilState] ?? TILE_COLORS.grass);
         this.tileMesh.setColorAt(index, this.tileColor);
-
-        const crop = this.cropSystem.getCrop(`${row},${col}`);
-        if (!crop) {
-          this.dummy.position.set(world.x, -100, world.z);
-          this.dummy.scale.set(0.001, 0.001, 0.001);
-          this.dummy.updateMatrix();
-          this.cropMesh.setMatrixAt(index, this.dummy.matrix);
-          continue;
-        }
-
-        const stageScale = 0.4 + crop.stage * 0.18;
-        this.dummy.position.set(world.x, 0.45, world.z);
-        this.dummy.rotation.set(Math.PI, 0, 0);
-        this.dummy.scale.set(stageScale, stageScale, stageScale);
-        this.dummy.updateMatrix();
-        this.cropMesh.setMatrixAt(index, this.dummy.matrix);
-
-        this.cropColor.setHex(crop.isWithered ? CROP_STAGE_COLORS.withered : CROP_STAGE_COLORS[crop.stage]);
-        this.cropMesh.setColorAt(index, this.cropColor);
       }
     }
 
     this.tileMesh.instanceMatrix.needsUpdate = true;
-    this.cropMesh.instanceMatrix.needsUpdate = true;
     if (this.tileMesh.instanceColor) this.tileMesh.instanceColor.needsUpdate = true;
-    if (this.cropMesh.instanceColor) this.cropMesh.instanceColor.needsUpdate = true;
+  }
+
+  refreshCropStages() {
+    const counts = {
+      seed: 0,
+      sprout: 0,
+      growth: 0,
+      flower: 0,
+      fruit: 0,
+      withered: 0
+    };
+
+    const { rows, cols } = this.gridSystem;
+
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < cols; col += 1) {
+        const crop = this.cropSystem.getCrop(`${row},${col}`);
+        if (!crop) continue;
+
+        const key = cropStageToKey(crop);
+        const mesh = this.stageMeshes[key];
+        const slot = counts[key]++;
+        const world = this.gridSystem.tileToWorld(row, col);
+
+        this.dummy.position.set(world.x, STAGE_Y[key], world.z);
+        this.dummy.rotation.set(key === 'flower' ? -Math.PI / 2 : key === 'fruit' ? Math.PI : 0, 0, 0);
+        this.dummy.scale.setScalar(STAGE_SCALE[key]);
+        this.dummy.updateMatrix();
+        mesh.setMatrixAt(slot, this.dummy.matrix);
+      }
+    }
+
+    for (const [key, mesh] of Object.entries(this.stageMeshes)) {
+      mesh.count = counts[key];
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    }
+  }
+
+  refreshTileIndicators() {
+    const counts = {
+      water: 0,
+      soon: 0,
+      ready: 0
+    };
+
+    const { rows, cols } = this.gridSystem;
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < cols; col += 1) {
+        const tile = this.gridSystem.getTile(row, col);
+        const crop = this.cropSystem.getCrop(`${row},${col}`);
+        if (!crop || crop.isWithered) continue;
+
+        let key = null;
+        if (crop.harvestable) key = 'ready';
+        else if (crop.stage >= STRAWBERRY_STAGE.FLOWER) key = 'soon';
+        else if (!tile.wateredToday) key = 'water';
+
+        if (!key) continue;
+
+        const mesh = this.indicatorMeshes[key];
+        const slot = counts[key]++;
+        const world = this.gridSystem.tileToWorld(row, col);
+
+        this.dummy.position.set(world.x, 0.92, world.z);
+        this.dummy.rotation.set(-Math.PI / 2, 0, 0);
+        this.dummy.scale.set(1, 1, 1);
+        this.dummy.updateMatrix();
+        mesh.setMatrixAt(slot, this.dummy.matrix);
+      }
+    }
+
+    for (const [key, mesh] of Object.entries(this.indicatorMeshes)) {
+      mesh.count = counts[key];
+      mesh.instanceMatrix.needsUpdate = true;
+    }
   }
 }

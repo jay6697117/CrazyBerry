@@ -25,5 +25,18 @@ export const ECONOMY = Object.freeze({
   PREMIUM_RATE: 0.2
 });
 
+export const WEATHER_CYCLE = Object.freeze([
+  { code: 'sunny', icon: '☀️' },
+  { code: 'cloudy', icon: '☁️' },
+  { code: 'rainy', icon: '🌧️' }
+]);
+
+export const ACTION_SOUND_TYPES = Object.freeze({
+  WATER: 'water',
+  HARVEST: 'harvest',
+  TILL: 'till',
+  PLANT: 'plant'
+});
+
 export const SAVE_VERSION = 1;
 export const SAVE_KEY = 'crazyberry.save.v1';

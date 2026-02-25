@@ -6,7 +6,7 @@ import { SaveSystem } from './SaveSystem.js';
 import { ShopSystem } from './ShopSystem.js';
 import { TimeSystem } from './TimeSystem.js';
 import { ToolAdvisor } from './ToolAdvisor.js';
-import { createParticlePool } from '../rendering/Effects.js';
+import { createNoopEffects, EffectsSystem } from '../rendering/Effects.js';
 import { FieldRenderer } from '../rendering/FieldRenderer.js';
 import { createSceneSetup } from '../rendering/SceneSetup.js';
 import { HUD } from '../ui/HUD.js';
@@ -14,6 +14,8 @@ import { ShopUI } from '../ui/ShopUI.js';
 import { Toolbar } from '../ui/Toolbar.js';
 import { computeMoveVector, Input } from '../utils/Input.js';
 import {
+  ACTION_SOUND_TYPES,
+  CROP_STAGE_THRESHOLDS,
   GRID_COLS,
   GRID_MAX_ROWS,
   GRID_ROWS,
@@ -44,7 +46,8 @@ function createHeadlessInputStub() {
 function createHeadlessToolbarStub() {
   return {
     setActiveTool() {},
-    setOnToolSelected() {}
+    setOnToolSelected() {},
+    setEconomyState() {}
   };
 }
 
@@ -62,6 +65,14 @@ function createHeadlessShopUIStub() {
   };
 }
 
+function stageToGrowthDays(stage) {
+  if (stage >= 5) return CROP_STAGE_THRESHOLDS[4];
+  if (stage >= 4) return CROP_STAGE_THRESHOLDS[3];
+  if (stage >= 3) return CROP_STAGE_THRESHOLDS[2];
+  if (stage >= 2) return CROP_STAGE_THRESHOLDS[1];
+  return CROP_STAGE_THRESHOLDS[0];
+}
+
 export class GameManager {
   constructor({ headless = false, rng = Math.random } = {}) {
     this.headless = headless;
@@ -73,8 +84,8 @@ export class GameManager {
     this.shopSystem = new ShopSystem();
     this.saveSystem = new SaveSystem();
     this.toolAdvisor = new ToolAdvisor();
-    this.effectsPool = createParticlePool(48);
     this.audioSystem = new AudioSystem({ enabled: !headless });
+    this.effects = createNoopEffects();
 
     this.manualTool = null;
     this.currentHint = 'WASD move, SPACE act, click tile';
@@ -110,6 +121,12 @@ export class GameManager {
         cropSystem: this.cropSystem
       });
 
+      this.effects = new EffectsSystem({
+        THREE: this.THREE,
+        scene: this.scene,
+        poolSize: 112
+      });
+
       this.raycaster = new this.THREE.Raycaster();
       this.ndc = new this.THREE.Vector2();
       this.cameraForward = new this.THREE.Vector3(0, 0, 1);
@@ -139,6 +156,7 @@ export class GameManager {
             this.syncUi();
             return;
           }
+
           const success = this.shopSystem.buyFarmExpansion();
           if (!success) {
             this.currentHint = 'Not enough coins for expansion';
@@ -163,12 +181,15 @@ export class GameManager {
         this.saveSystem.save(this.getSnapshot());
       };
       window.addEventListener('beforeunload', this.beforeUnloadHandler);
+
+      await this.audioSystem.init();
     } else {
       this.input = createHeadlessInputStub();
       this.hud = createHeadlessHUDStub();
       this.toolbar = createHeadlessToolbarStub();
       this.shopUI = createHeadlessShopUIStub();
       this.cameraForward = { x: 0, y: 0, z: 1 };
+      await this.audioSystem.init();
     }
 
     const savedSnapshot = this.saveSystem.load();
@@ -240,6 +261,8 @@ export class GameManager {
       if (tile) this.performPrimaryAction(tile.row, tile.col);
     }
 
+    this.effects.update(deltaSeconds);
+
     if (this.pendingFieldRefresh && this.fieldRenderer) {
       this.fieldRenderer.refreshAll();
       this.pendingFieldRefresh = false;
@@ -285,23 +308,34 @@ export class GameManager {
 
     const tileKey = `${row},${col}`;
     const crop = this.cropSystem.getCrop(tileKey);
+    const world = this.gridSystem.tileToWorld(row, col);
     const tool = this.manualTool ?? this.toolAdvisor.recommend(tile, crop);
 
     let success = false;
 
     if (tool === TOOL_TYPES.HOE) {
       success = this.gridSystem.tillTile(row, col);
-      if (success) this.currentHint = 'Tile tilled';
+      if (success) {
+        this.currentHint = 'Tile tilled';
+        this.audioSystem.playAction(ACTION_SOUND_TYPES.TILL);
+      }
     }
 
     if (tool === TOOL_TYPES.SEED) {
       if (!this.shopSystem.consumeSeed(1)) {
-        this.shopSystem.buySeed(1);
+        const purchased = this.shopSystem.buySeed(1);
+        if (!purchased) {
+          this.currentHint = 'Not enough coins for seeds';
+          this.syncUi();
+          return { success: false, tool };
+        }
         this.shopSystem.consumeSeed(1);
       }
+
       const planted = this.gridSystem.plantTile(row, col, 'strawberry');
       if (planted) {
         this.cropSystem.plant(tileKey, this.timeSystem.getDayNumber());
+        this.audioSystem.playAction(ACTION_SOUND_TYPES.PLANT);
         success = true;
         this.currentHint = 'Seed planted';
       } else {
@@ -313,6 +347,8 @@ export class GameManager {
       success = this.gridSystem.waterTile(row, col);
       if (success) {
         this.cropSystem.water(tileKey);
+        this.effects.spawnWaterSplash(world.x, 0.26, world.z);
+        this.audioSystem.playAction(ACTION_SOUND_TYPES.WATER);
         this.currentHint = 'Watered';
       }
     }
@@ -320,7 +356,10 @@ export class GameManager {
     if (tool === TOOL_TYPES.SHOVEL) {
       this.cropSystem.remove(tileKey);
       success = this.gridSystem.clearTile(row, col);
-      if (success) this.currentHint = 'Withered crop cleared';
+      if (success) {
+        this.currentHint = 'Withered crop cleared';
+        this.audioSystem.playAction(ACTION_SOUND_TYPES.TILL);
+      }
     }
 
     if (tool === TOOL_TYPES.HAND) {
@@ -328,7 +367,8 @@ export class GameManager {
       if (result) {
         this.shopSystem.addHarvest(result);
         this.gridSystem.clearTile(row, col);
-        this.audioSystem.play('harvest');
+        this.effects.spawnHarvestSparkle(world.x, 0.5, world.z);
+        this.audioSystem.playAction(ACTION_SOUND_TYPES.HARVEST);
         this.currentHint = `Harvested ${result.quality} strawberry`;
         success = true;
       }
@@ -351,20 +391,21 @@ export class GameManager {
 
   updateLighting(phase) {
     if (!this.sun) return;
+
     if (phase === 'morning') {
-      this.sun.color.setHex(0xfff1cc);
-      this.sun.intensity = 1.0;
+      this.sun.color.setHex(0xffe8b6);
+      this.sun.intensity = 1.05;
     }
     if (phase === 'noon') {
-      this.sun.color.setHex(0xffffff);
-      this.sun.intensity = 1.15;
+      this.sun.color.setHex(0xfff9e5);
+      this.sun.intensity = 1.18;
     }
     if (phase === 'dusk') {
-      this.sun.color.setHex(0xffa05f);
-      this.sun.intensity = 0.75;
+      this.sun.color.setHex(0xffa261);
+      this.sun.intensity = 0.72;
     }
     if (phase === 'night') {
-      this.sun.color.setHex(0x4a6b9b);
+      this.sun.color.setHex(0x5075a8);
       this.sun.intensity = 0.4;
     }
   }
@@ -372,15 +413,19 @@ export class GameManager {
   syncUi() {
     const economyState = this.shopSystem.getEconomyState();
     const strawberryCount = economyState.normalStrawberry + economyState.premiumStrawberry;
+    const weather = this.timeSystem.getWeatherState();
 
     this.hud.setState({
       dayNumber: this.timeSystem.getDayNumber(),
       phase: titleCase(this.timeSystem.getPhase()),
+      clockLabel: this.timeSystem.getClockLabel(),
+      weatherIcon: weather.icon,
       coins: economyState.coins,
       strawberryCount,
       hint: this.currentHint
     });
 
+    this.toolbar.setEconomyState(economyState);
     this.shopUI.setState(economyState);
   }
 
@@ -390,6 +435,7 @@ export class GameManager {
       version: SAVE_VERSION,
       dayNumber: this.timeSystem.getDayNumber(),
       timeOfDay: this.timeSystem.getElapsedRatio(),
+      weather: this.timeSystem.getWeatherState().code,
       grid: this.gridSystem.snapshot(),
       crops: this.cropSystem.snapshot(),
       economy: this.shopSystem.snapshot(),
@@ -440,6 +486,23 @@ export class GameManager {
         this.toolbar.setActiveTool(tool);
       },
       performAction: (row, col) => this.performPrimaryAction(row, col),
+      setCropStage: (row, col, stage, withered = false) => {
+        const tileKey = `${row},${col}`;
+        this.gridSystem.tillTile(row, col);
+        if (!this.gridSystem.getTile(row, col).cropId) {
+          this.gridSystem.plantTile(row, col, 'strawberry');
+          this.cropSystem.plant(tileKey, this.timeSystem.getDayNumber());
+        }
+
+        const crop = this.cropSystem.getCrop(tileKey);
+        crop.stage = Math.max(1, Math.min(5, Math.floor(stage)));
+        crop.growthDays = stageToGrowthDays(crop.stage);
+        crop.harvestable = crop.stage === 5 && !withered;
+        crop.isWithered = Boolean(withered);
+        this.pendingFieldRefresh = true;
+        this.syncUi();
+        return crop;
+      },
       getState: () => this.getSnapshot(),
       debugRunFullLoop: () => {
         const oldRng = this.rng;

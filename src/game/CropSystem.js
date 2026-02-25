@@ -1,12 +1,5 @@
-import { CROP_STAGE_THRESHOLDS, ECONOMY } from '../utils/Constants.js';
-
-function stageFromGrowth(growthDays) {
-  if (growthDays >= CROP_STAGE_THRESHOLDS[4]) return 5;
-  if (growthDays >= CROP_STAGE_THRESHOLDS[3]) return 4;
-  if (growthDays >= CROP_STAGE_THRESHOLDS[2]) return 3;
-  if (growthDays >= CROP_STAGE_THRESHOLDS[1]) return 2;
-  return 1;
-}
+import { ECONOMY } from '../utils/Constants.js';
+import { resolveStageFromGrowthDays, STRAWBERRY_STAGE } from '../entities/Strawberry.js';
 
 export class CropSystem {
   constructor() {
@@ -17,7 +10,7 @@ export class CropSystem {
     this.crops.set(tileKey, {
       plantedDay: dayNumber,
       growthDays: 0,
-      stage: 1,
+      stage: STRAWBERRY_STAGE.SEED,
       missedWaterDays: 0,
       harvestable: false,
       isWithered: false
@@ -56,8 +49,8 @@ export class CropSystem {
         continue;
       }
 
-      crop.stage = stageFromGrowth(crop.growthDays);
-      crop.harvestable = crop.stage === 5;
+      crop.stage = resolveStageFromGrowthDays(crop.growthDays);
+      crop.harvestable = crop.stage === STRAWBERRY_STAGE.FRUIT;
       crop.lastUpdatedDay = dayNumber;
     }
   }

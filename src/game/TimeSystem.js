@@ -1,4 +1,4 @@
-import { DAY_DURATION_SECONDS } from '../utils/Constants.js';
+import { DAY_DURATION_SECONDS, WEATHER_CYCLE } from '../utils/Constants.js';
 
 export class TimeSystem {
   constructor({ dayDurationSeconds = DAY_DURATION_SECONDS } = {}) {
@@ -52,5 +52,20 @@ export class TimeSystem {
     if (ratio < 0.5) return 'noon';
     if (ratio < 0.75) return 'dusk';
     return 'night';
+  }
+
+  getWeatherState() {
+    return WEATHER_CYCLE[(this.dayNumber - 1) % WEATHER_CYCLE.length];
+  }
+
+  getClockLabel() {
+    const dayMinutes = 24 * 60;
+    const base = 6 * 60;
+    const current = Math.floor((base + this.getElapsedRatio() * dayMinutes) % dayMinutes);
+    const hour24 = Math.floor(current / 60);
+    const minute = current % 60;
+    const suffix = hour24 >= 12 ? 'pm' : 'am';
+    const hour12 = hour24 % 12 || 12;
+    return `${String(hour12).padStart(2, '0')}:${String(minute).padStart(2, '0')} ${suffix}`;
   }
 }

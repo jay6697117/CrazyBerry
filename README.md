@@ -29,5 +29,18 @@ Append `?debug=1` and use `window.__crazyberry` in DevTools:
 - `setDay(dayNumber)`
 - `forceTool(tool)`
 - `performAction(row, col)`
+- `setCropStage(row, col, stage, withered)`
 - `getState()`
 - `debugRunFullLoop()`
+
+## Audio Assets
+
+Action sounds are loaded from `assets/sounds/*.wav`:
+
+- `assets/sounds/water.wav`
+- `assets/sounds/harvest.wav`
+- `assets/sounds/till.wav`
+- `assets/sounds/plant.wav`
+
+`AudioSystem.playAction(type)` tries the asset first. If playback fails or no asset exists,
+it falls back to a WebAudio synth tone profile for the same action type.

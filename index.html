@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CrazyBerry</title>
+    <style>
+      :root {
+        --bg: #c9e8b2;
+        --panel: rgba(15, 22, 20, 0.72);
+        --panel-border: rgba(255, 255, 255, 0.22);
+        --text: #f7fff5;
+        --accent: #ffd54f;
+        --accent-2: #ff5a6b;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        font-family: 'Avenir Next', 'Helvetica Neue', sans-serif;
+        background: radial-gradient(circle at 20% 20%, #e8f8d6, var(--bg));
+      }
+
+      #app {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+
+      #game-canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      #hud {
+        position: absolute;
+        top: 14px;
+        left: 14px;
+        right: 14px;
+        display: flex;
+        justify-content: space-between;
+        pointer-events: none;
+      }
+
+      .panel {
+        background: var(--panel);
+        color: var(--text);
+        border: 1px solid var(--panel-border);
+        border-radius: 12px;
+        padding: 8px 12px;
+        min-width: 140px;
+        backdrop-filter: blur(6px);
+      }
+
+      #toolbar {
+        position: absolute;
+        left: 50%;
+        bottom: 16px;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        border-radius: 14px;
+        padding: 8px;
+      }
+
+      [data-tool],
+      #open-shop,
+      [data-shop-action] {
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--text);
+        padding: 6px 10px;
+        cursor: pointer;
+      }
+
+      [data-tool][data-active='true'] {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px rgba(255, 213, 79, 0.35);
+      }
+
+      #hint {
+        position: absolute;
+        left: 50%;
+        bottom: 86px;
+        transform: translateX(-50%);
+        color: #173124;
+        background: rgba(255, 255, 255, 0.78);
+        padding: 6px 10px;
+        border-radius: 10px;
+        font-size: 13px;
+      }
+
+      #shop-modal {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: min(560px, calc(100vw - 24px));
+        border: 1px solid var(--panel-border);
+        background: rgba(19, 27, 24, 0.95);
+        color: var(--text);
+        border-radius: 14px;
+        padding: 14px;
+        display: none;
+        z-index: 5;
+      }
+
+      #shop-modal[data-open='true'] {
+        display: block;
+      }
+
+      #shop-close {
+        position: absolute;
+        right: 10px;
+        top: 10px;
+      }
+
+      .shop-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .shop-card {
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 10px;
+        padding: 10px;
+      }
+
+      @media (max-width: 700px) {
+        .shop-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game-canvas"></canvas>
+
+      <div id="hud">
+        <div class="panel">
+          <div data-testid="hud-day">Day 1</div>
+          <div data-testid="hud-phase">Morning</div>
+        </div>
+        <div class="panel">
+          <div data-testid="hud-coins">100</div>
+          <div data-testid="hud-strawberry">0</div>
+        </div>
+      </div>
+
+      <div id="hint" data-testid="hud-hint">WASD move, SPACE act, click tile</div>
+
+      <div id="toolbar">
+        <button data-testid="tool-hoe" data-tool="hoe" data-active="false">🪓</button>
+        <button data-testid="tool-seed" data-tool="seed" data-active="false">🌰</button>
+        <button data-testid="tool-water" data-tool="water" data-active="false">💧</button>
+        <button data-testid="tool-hand" data-tool="hand" data-active="false">✋</button>
+        <button data-testid="tool-shovel" data-tool="shovel" data-active="false">🧹</button>
+        <button id="open-shop" data-testid="open-shop">🛒</button>
+      </div>
+
+      <section id="shop-modal" data-testid="shop-modal" data-open="false">
+        <button id="shop-close" type="button">Close</button>
+        <h3>Shop</h3>
+        <div class="shop-grid">
+          <article class="shop-card">
+            <h4>Buy</h4>
+            <button data-shop-action="buy-seed" type="button">Seed (10)</button>
+            <button data-shop-action="buy-can" type="button">Watering Upgrade (200)</button>
+            <button data-shop-action="buy-expand" type="button">Expand Farm +1 Row (500)</button>
+          </article>
+          <article class="shop-card">
+            <h4>Sell</h4>
+            <button data-shop-action="sell-normal" type="button">Sell Normal Strawberry (25)</button>
+            <button data-shop-action="sell-premium" type="button">Sell Premium Strawberry (50)</button>
+            <div data-testid="shop-stock">Stock: normal 0 / premium 0</div>
+          </article>
+        </div>
+      </section>
+    </div>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

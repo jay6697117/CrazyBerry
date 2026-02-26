@@ -44,6 +44,7 @@ export class Input {
     };
     this.actionQueued = false;
     this.pointer = null;
+    this.zoomDelta = 0; // 收集滚轮增量
 
     this.onKeyDown = (event) => this.#handleKey(event.key, true);
     this.onKeyUp = (event) => this.#handleKey(event.key, false);
@@ -55,10 +56,18 @@ export class Input {
       }
       this.pointer = { x: event.clientX, y: event.clientY };
     };
+    this.onWheel = (event) => {
+      if (event.target instanceof Element) {
+        const insideUi = event.target.closest('#shop-modal');
+        if (insideUi) return;
+      }
+      this.zoomDelta += event.deltaY;
+    };
 
     this.targetWindow.addEventListener('keydown', this.onKeyDown);
     this.targetWindow.addEventListener('keyup', this.onKeyUp);
     this.targetDocument.addEventListener('pointerdown', this.onPointerDown);
+    this.targetDocument.addEventListener('wheel', this.onWheel, { passive: true });
   }
 
   #handleKey(key, pressed) {
@@ -86,9 +95,16 @@ export class Input {
     return value;
   }
 
+  consumeZoomDelta() {
+    const delta = this.zoomDelta;
+    this.zoomDelta = 0;
+    return delta;
+  }
+
   destroy() {
     this.targetWindow.removeEventListener('keydown', this.onKeyDown);
     this.targetWindow.removeEventListener('keyup', this.onKeyUp);
     this.targetDocument.removeEventListener('pointerdown', this.onPointerDown);
+    this.targetDocument.removeEventListener('wheel', this.onWheel);
   }
 }

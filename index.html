@@ -162,7 +162,7 @@
         position: absolute;
         left: 50%;
         bottom: 104px;
-        transform: translateX(-50%);
+        transform: translate(-50%, 10px);
         background: rgba(253, 250, 238, 0.92);
         border: 1px solid rgba(99, 77, 47, 0.15);
         color: #4b3525;
@@ -170,6 +170,15 @@
         padding: 8px 14px;
         font-size: 13px;
         box-shadow: 0 5px 15px rgba(43, 29, 11, 0.14);
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.3s;
+      }
+
+      #hint[style*="display: block"] {
+        opacity: 1;
+        visibility: visible;
+        transform: translate(-50%, 0);
       }
 
       #toolbar {
@@ -178,7 +187,7 @@
         bottom: 16px;
         transform: translateX(-50%);
         display: grid;
-        grid-template-columns: repeat(8, minmax(0, auto));
+        grid-template-columns: repeat(9, minmax(0, auto));
         align-items: center;
         gap: 8px;
         padding: 10px;
@@ -190,7 +199,8 @@
 
       .tool-slot,
       #open-shop,
-      #toggle-auto-farm {
+      #toggle-auto-farm,
+      #reset-save-btn {
         position: relative;
         width: 56px;
         height: 56px;
@@ -211,6 +221,11 @@
         font-size: 11px;
         font-weight: 800;
         letter-spacing: 0.04em;
+      }
+
+      #reset-save-btn {
+        font-size: 12px;
+        font-weight: 700;
       }
 
       #toggle-auto-farm[data-active='true'] {
@@ -240,19 +255,27 @@
         position: absolute;
         top: 50%;
         left: 50%;
-        transform: translate(-50%, -50%);
+        transform: translate(-50%, -45%);
         width: min(560px, calc(100vw - 24px));
         border: 1px solid rgba(255, 255, 255, 0.16);
-        background: rgba(25, 34, 28, 0.95);
+        background: rgba(25, 34, 28, 0.85);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
         color: #f5f9f4;
         border-radius: 14px;
         padding: 14px;
-        display: none;
         z-index: 5;
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition: opacity 0.35s ease, transform 0.35s ease, visibility 0.35s;
       }
 
       #shop-modal[data-open='true'] {
-        display: block;
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+        transform: translate(-50%, -50%);
       }
 
       #shop-close {
@@ -301,7 +324,8 @@
 
         .tool-slot,
         #open-shop,
-        #toggle-auto-farm {
+        #toggle-auto-farm,
+        #reset-save-btn {
           width: 48px;
           height: 48px;
           font-size: 20px;
@@ -310,11 +334,15 @@
         #toggle-auto-farm {
           font-size: 10px;
         }
+
+        #reset-save-btn {
+          font-size: 11px;
+        }
       }
 
       @media (max-width: 700px) {
         #toolbar {
-          grid-template-columns: repeat(4, minmax(0, auto));
+          grid-template-columns: repeat(5, minmax(0, auto));
           gap: 6px;
         }
 
@@ -370,9 +398,10 @@
         </button>
         <button class="tool-slot" data-testid="tool-water" data-tool="water" data-active="false">💧</button>
         <button class="tool-slot" data-testid="tool-hand" data-tool="hand" data-active="false">✋</button>
-        <button class="tool-slot" data-testid="tool-shovel" data-tool="shovel" data-active="false">🧹</button>
+        <button class="tool-slot" data-testid="tool-shovel" data-tool="shovel" data-active="false">⛏️</button>
         <button id="toggle-auto-farm" data-testid="toggle-auto-farm" data-active="false" aria-pressed="false">AUTO</button>
         <button id="open-shop" data-testid="open-shop">🛒</button>
+        <button id="reset-save-btn" data-testid="reset-save-btn">新开档</button>
         <div data-testid="toolbar-active">工具：自动</div>
       </div>
 

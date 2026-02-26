@@ -5,8 +5,10 @@ export class Toolbar {
     this.seedCounter = root?.querySelector('[data-testid="toolbar-seeds"]') ?? null;
     this.activeToolLabel = root?.querySelector('[data-testid="toolbar-active"]') ?? null;
     this.autoFarmButton = root?.querySelector('[data-testid="toggle-auto-farm"]') ?? null;
+    this.resetSaveButton = root?.querySelector('[data-testid="reset-save-btn"]') ?? null;
     this.onToolSelected = null;
     this.onAutoFarmToggle = null;
+    this.onResetSave = null;
     this.autoFarmEnabled = false;
 
     for (const button of this.toolButtons) {
@@ -21,6 +23,10 @@ export class Toolbar {
       const next = !this.autoFarmEnabled;
       if (this.onAutoFarmToggle) this.onAutoFarmToggle(next);
     });
+
+    this.resetSaveButton?.addEventListener('click', () => {
+      if (this.onResetSave) this.onResetSave();
+    });
   }
 
   setOnToolSelected(handler) {
@@ -29,6 +35,10 @@ export class Toolbar {
 
   setOnAutoFarmToggle(handler) {
     this.onAutoFarmToggle = handler;
+  }
+
+  setOnResetSave(handler) {
+    this.onResetSave = handler;
   }
 
   setAutoFarmEnabled(enabled) {

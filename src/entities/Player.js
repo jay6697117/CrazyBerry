@@ -65,13 +65,30 @@ export class Player {
     hatGroup.position.set(0, 1.05 + offsetY, 0);
     hatGroup.rotation.x = -0.1; // 稍微后倾
 
+    // 新增手持的铲子模型
+    const toolGroup = new THREE.Group();
+    const handleGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.6, 6);
+    const handleMat = new THREE.MeshStandardMaterial({ color: 0x8a5b33, roughness: 0.9 });
+    const handle = new THREE.Mesh(handleGeo, handleMat);
+    const bladeGeo = new THREE.BoxGeometry(0.15, 0.2, 0.02);
+    const bladeMat = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.8, roughness: 0.3 });
+    const blade = new THREE.Mesh(bladeGeo, bladeMat);
+    blade.position.y = -0.3;
+    toolGroup.add(handle, blade);
+    toolGroup.position.set(0.2, 0.6 + offsetY, 0.15); // 放在右手前方
+    toolGroup.rotation.x = -Math.PI / 4; // 倾斜拿着
+    toolGroup.rotation.z = Math.PI / 12;
+    toolGroup.visible = false;
+    this.shovelMesh = toolGroup;
+
     this.group.add(
       shoeLeft, shoeRight,
       pants,
       shirt, suspenderL, suspenderR,
       head, nose,
       armLeft, armRight,
-      hatGroup
+      hatGroup,
+      this.shovelMesh
     );
 
     // 开启阴影
@@ -107,6 +124,12 @@ export class Player {
     if (!this.group) return;
     if (Math.abs(dx) < 0.0001 && Math.abs(dz) < 0.0001) return;
     this.group.rotation.y = Math.atan2(dx, dz);
+  }
+
+  setTool(tool) {
+    if (this.headless || !this.shovelMesh) return;
+    // 当玩家携带铲子等主要动作工具时显示它
+    this.shovelMesh.visible = tool === 'shovel' || tool === 'hoe' || tool === 'water';
   }
 
   getPosition() {

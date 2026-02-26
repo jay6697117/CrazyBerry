@@ -51,6 +51,7 @@ function createHeadlessToolbarStub() {
     setAutoFarmEnabled() {},
     setOnToolSelected() {},
     setOnAutoFarmToggle() {},
+    setOnResetSave() {},
     setEconomyState() {}
   };
 }
@@ -159,10 +160,14 @@ export class GameManager {
         if (this.autoFarmEnabled) {
           this.setAutoFarmEnabled(false, 'manual');
         }
+        this.player.setTool(tool);
         this.toolbar.setActiveTool(tool);
       });
       this.toolbar.setOnAutoFarmToggle((enabled) => {
         this.setAutoFarmEnabled(enabled, 'toolbar');
+      });
+      this.toolbar.setOnResetSave(() => {
+        this.handleResetSave();
       });
       this.toolbar.setAutoFarmEnabled(false);
 
@@ -263,6 +268,14 @@ export class GameManager {
   update(deltaSeconds) {
     const timeState = this.timeSystem.update(deltaSeconds * this.timeMultiplier);
     this.updateLighting(timeState.phase);
+
+    const zoomDelta = this.input.consumeZoomDelta?.() || 0;
+    if (Math.abs(zoomDelta) > 0 && this.camera?.zoom) {
+      // 通过滚轮增量调整缩放比例，向上滚 (deltaY<0) 放大，向下滚 (deltaY>0) 缩小
+      this.camera.zoom *= (1 - zoomDelta * 0.001);
+      this.camera.zoom = Math.max(0.4, Math.min(this.camera.zoom, 3.0));
+      this.camera.updateProjectionMatrix();
+    }
 
     const movement = this.input.getMovementState();
     const hasMovementInput = movement.up || movement.down || movement.left || movement.right;
@@ -367,6 +380,48 @@ export class GameManager {
 
     this.toolbar.setAutoFarmEnabled(nextEnabled);
     this.syncUi();
+  }
+
+  handleResetSave() {
+    const shouldReset = typeof window === 'undefined' || typeof window.confirm !== 'function'
+      ? true
+      : window.confirm('确认新开档？当前进度将被清空。');
+    if (!shouldReset) return false;
+    this.resetToNewSave();
+    return true;
+  }
+
+  resetToNewSave() {
+    this.autoFarmEnabled = false;
+    this.autoTarget = null;
+    this.autoActionCooldownSeconds = 0;
+    this.autoTradeCooldownSeconds = 0;
+    this.autoActionCount = 0;
+    this.autoTradeCount = 0;
+    this.timeMultiplier = 1;
+
+    this.manualTool = null;
+    this.toolbar.setAutoFarmEnabled(false);
+    this.toolbar.setActiveTool(null);
+
+    this.timeSystem.setDayNumber(1);
+    this.timeSystem.setTimeRatio(0);
+
+    const freshGrid = new GridSystem({ rows: GRID_ROWS, cols: GRID_COLS, tileSize: GRID_TILE_SIZE });
+    this.gridSystem.restore(freshGrid.snapshot());
+    this.cropSystem.restore({});
+    this.shopSystem.restore(new ShopSystem().snapshot());
+
+    this.player.setPosition(0, this.player.position.y ?? 0.8, 0);
+    this.shopUI.close();
+    this.currentHint = '已新开档';
+    this.pendingFieldRefresh = true;
+
+    const freshSnapshot = this.getSnapshot();
+    this.saveSystem.clear();
+    this.saveSystem.save(freshSnapshot);
+    this.syncUi();
+    return freshSnapshot;
   }
 
   countTilledEmptyTiles() {
@@ -556,8 +611,10 @@ export class GameManager {
 
     if (this.autoFarmEnabled) {
       this.toolbar.setActiveTool(null);
+      this.player.setTool(null);
     } else {
       this.toolbar.setActiveTool(tool);
+      this.player.setTool(tool);
     }
     this.pendingFieldRefresh = true;
     this.syncUi();
@@ -703,6 +760,7 @@ export class GameManager {
         return crop;
       },
       getState: () => this.getSnapshot(),
+      resetSave: () => this.resetToNewSave(),
       debugRunFullLoop: () => {
         const oldRng = this.rng;
         this.rng = () => 0.99;

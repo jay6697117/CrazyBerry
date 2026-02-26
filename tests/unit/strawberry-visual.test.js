@@ -22,6 +22,7 @@ function createFakeThree() {
     }
     toNonIndexed() { return this; }
     computeVertexNormals() {}
+    rotateX() { return this; }
   }
 
   class FakeMaterial {

@@ -18,7 +18,25 @@ function createInstanced(THREE, geometry, material, maxCount, { castShadow, rece
 export function getSharedTileGeometry(THREE) {
   const cacheKey = key('tileGeo');
   if (!geometryCache.has(cacheKey)) {
-    geometryCache.set(cacheKey, new THREE.BoxGeometry(1, 0.2, 1));
+    // 带有分段的 Box，用于制作多边形表面
+    const geo = new THREE.BoxGeometry(0.96, 0.35, 0.96, 2, 1, 2);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      // 仅对顶部顶点做抖动
+      if (pos.getY(i) > 0) {
+        pos.setY(i, pos.getY(i) + (Math.random() - 0.5) * 0.08);
+        pos.setX(i, pos.getX(i) + (Math.random() - 0.5) * 0.04);
+        pos.setZ(i, pos.getZ(i) + (Math.random() - 0.5) * 0.04);
+      }
+    }
+    geo.computeVertexNormals();
+    const flatGeo = geo.toNonIndexed();
+    flatGeo.computeVertexNormals();
+
+    // 平移使其底部贴近 0，原先 y是中心点
+    flatGeo.translate(0, -0.05, 0);
+
+    geometryCache.set(cacheKey, flatGeo);
   }
   return geometryCache.get(cacheKey);
 }
@@ -29,7 +47,7 @@ export function getSharedTileMaterial(THREE) {
     materialCache.set(
       cacheKey,
       new THREE.MeshStandardMaterial({
-        color: 0x9c6b40,
+        color: 0xffffff,
         flatShading: true,
         roughness: 0.9,
         metalness: 0.02

@@ -18,26 +18,26 @@ export function tileIndex(row, col, cols) {
 }
 
 const TILE_COLORS = {
-  grass: 0x7fb65c,
-  tilled: 0x7a4f2f
+  grass: 0x86cc5b,
+  tilled: 0x6e4529
 };
 
 const STAGE_SCALE = {
-  seed: 1,
-  sprout: 1,
-  growth: 1,
-  flower: 1,
-  fruit: 1,
+  seed: 0.8,
+  sprout: 1.2,
+  growth: 1.1,
+  flower: 1.4,
+  fruit: 1.2,
   withered: 1
 };
 
 const STAGE_Y = {
-  seed: 0.14,
-  sprout: 0.23,
-  growth: 0.35,
-  flower: 0.48,
-  fruit: 0.49,
-  withered: 0.35
+  seed: 0.12,
+  sprout: 0.28,
+  growth: 0.22,
+  flower: 0.26,
+  fruit: 0.35,
+  withered: 0.22
 };
 
 function cropStageToKey(crop) {
@@ -142,7 +142,9 @@ export class FieldRenderer {
         const world = this.gridSystem.tileToWorld(row, col);
 
         this.dummy.position.set(world.x, STAGE_Y[key], world.z);
-        this.dummy.rotation.set(key === 'flower' ? -Math.PI / 2 : key === 'fruit' ? Math.PI : 0, 0, 0);
+        // 不再强制转倒，而是给一个随机的 Y 轴水平旋转来增加真实感
+        const randomYRot = (row * cols + col) * 0.5;
+        this.dummy.rotation.set(0, randomYRot, 0);
         this.dummy.scale.setScalar(STAGE_SCALE[key]);
         this.dummy.updateMatrix();
         mesh.setMatrixAt(slot, this.dummy.matrix);

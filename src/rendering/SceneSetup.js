@@ -1,6 +1,10 @@
 const THREE_MODULE_URL = 'https://unpkg.com/three@0.160.0/build/three.module.js';
+const COMPOSER_URL = 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
+const RENDER_PASS_URL = 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
+const BLOOM_PASS_URL = 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js';
 
 let threePromise;
+let composerLoaders;
 
 export function getRendererPixelRatioCap(devicePixelRatio) {
   return Math.min(devicePixelRatio, 2);
@@ -8,9 +12,20 @@ export function getRendererPixelRatioCap(devicePixelRatio) {
 
 export async function loadThreeModule() {
   if (!threePromise) {
-    threePromise = import(THREE_MODULE_URL);
+    threePromise = import('three');
   }
   return threePromise;
+}
+
+export async function loadPostProcessing() {
+  if (!composerLoaders) {
+    composerLoaders = Promise.all([
+      import(COMPOSER_URL),
+      import(RENDER_PASS_URL),
+      import(BLOOM_PASS_URL)
+    ]);
+  }
+  return composerLoaders;
 }
 
 function createFallbackRenderer(canvas) {
@@ -77,6 +92,10 @@ export async function createSceneSetup(canvas) {
   renderer.setPixelRatio(getRendererPixelRatioCap(window.devicePixelRatio));
   if (renderer.shadowMap) renderer.shadowMap.enabled = true;
 
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
+
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xa7d48f);
 
@@ -84,10 +103,22 @@ export async function createSceneSetup(canvas) {
   camera.position.set(10, 12, 10);
   camera.lookAt(0, 0, 0);
 
-  const ambient = new THREE.AmbientLight(0xffffff, 0.45);
-  const sun = new THREE.DirectionalLight(0xfff1cc, 1.0);
-  sun.position.set(8, 14, 6);
-  scene.add(ambient, sun);
+  const hemiLight = new THREE.HemisphereLight(0xfff5e6, 0x87be5c, 0.6);
+  scene.add(hemiLight);
+
+  const sun = new THREE.DirectionalLight(0xfff1cc, 1.4);
+  sun.position.set(15, 20, 10);
+  sun.castShadow = true;
+  sun.shadow.mapSize.width = 2048;
+  sun.shadow.mapSize.height = 2048;
+  sun.shadow.camera.near = 0.5;
+  sun.shadow.camera.far = 50;
+  sun.shadow.camera.left = -15;
+  sun.shadow.camera.right = 15;
+  sun.shadow.camera.top = 15;
+  sun.shadow.camera.bottom = -15;
+  sun.shadow.bias = -0.0005;
+  scene.add(sun);
 
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(42, 42),
@@ -98,9 +129,41 @@ export async function createSceneSetup(canvas) {
   ground.receiveShadow = true;
   scene.add(ground);
 
+  // Load post processing and construct composer
+  let composer = { render: () => renderer.render(scene, camera) }; // Fallback
+  try {
+    const [ComposerModule, RenderPassModule, UnrealBloomPassModule] = await loadPostProcessing();
+    const effectComposer = new ComposerModule.EffectComposer(renderer);
+
+    const renderPass = new RenderPassModule.RenderPass(scene, camera);
+    effectComposer.addPass(renderPass);
+
+    // 分辨率, strength, radius, threshold
+    const bloomPass = new UnrealBloomPassModule.UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.45, // 强度
+      0.8,  // 范围
+      0.65  // 阈值 (只让较亮的部分发光)
+    );
+    effectComposer.addPass(bloomPass);
+
+    composer = effectComposer;
+
+    // 为了向后兼容已有逻辑，覆写一下 renderer 的 render
+    const origRender = renderer.render.bind(renderer);
+    renderer.render = function() {
+      effectComposer.render();
+    };
+  } catch(e) {
+    console.warn("Post-processing load failed, using basic render.", e);
+  }
+
   const onResize = () => {
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    renderer.setSize(w, h);
     renderer.setPixelRatio(getRendererPixelRatioCap(window.devicePixelRatio));
+    if(composer.setSize) composer.setSize(w, h);
   };
 
   window.addEventListener('resize', onResize);
@@ -111,6 +174,7 @@ export async function createSceneSetup(canvas) {
     scene,
     camera,
     sun,
+    composer,
     dispose() {
       window.removeEventListener('resize', onResize);
       renderer.dispose();

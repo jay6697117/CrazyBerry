@@ -18,25 +18,51 @@ export function resolveStageFromGrowthDays(growthDays) {
   return STRAWBERRY_STAGE.SEED;
 }
 
+function createLowPolySphere(THREE, radius, heightSegments, widthSegments) {
+  const geo = new THREE.SphereGeometry(radius, widthSegments, heightSegments);
+  const pos = geo.attributes.position;
+  // 给顶点加一点随机噪声
+  for(let i=0; i<pos.count; i++) {
+    pos.setXYZ(i,
+      pos.getX(i) + (Math.random()-0.5)*radius*0.15,
+      pos.getY(i) + (Math.random()-0.5)*radius*0.15,
+      pos.getZ(i) + (Math.random()-0.5)*radius*0.15
+    );
+  }
+  return geo.toNonIndexed();
+}
+
 export function createStageVisualFactory(THREE) {
   if (stageVisualCache.has(THREE)) {
     return stageVisualCache.get(THREE);
   }
 
+  // 构建自定义形状
+  // 果实：顶部宽，底部尖
+  const fruitGeo = new THREE.CylinderGeometry(0.18, 0.05, 0.45, 7, 1);
+  const fPos = fruitGeo.attributes.position;
+  for(let i=0; i<fPos.count; i++) {
+    fPos.setY(i, fPos.getY(i) + (Math.random()-0.5)*0.05);
+    fPos.setX(i, fPos.getX(i) + (Math.random()-0.5)*0.05);
+    fPos.setZ(i, fPos.getZ(i) + (Math.random()-0.5)*0.05);
+  }
+  fruitGeo.computeVertexNormals();
+
   const visuals = {
     geometries: {
-      [STRAWBERRY_STAGE.SEED]: new THREE.SphereGeometry(0.13, 8, 6),
-      [STRAWBERRY_STAGE.SPROUT]: new THREE.ConeGeometry(0.14, 0.38, 8),
-      [STRAWBERRY_STAGE.GROWTH]: new THREE.IcosahedronGeometry(0.25, 0),
-      [STRAWBERRY_STAGE.FLOWER]: new THREE.CircleGeometry(0.23, 8),
-      [STRAWBERRY_STAGE.FRUIT]: new THREE.ConeGeometry(0.2, 0.42, 8)
+      [STRAWBERRY_STAGE.SEED]: createLowPolySphere(THREE, 0.1, 4, 4),
+      [STRAWBERRY_STAGE.SPROUT]: new THREE.ConeGeometry(0.12, 0.3, 5).toNonIndexed(),
+      [STRAWBERRY_STAGE.GROWTH]: createLowPolySphere(THREE, 0.25, 5, 5),
+      // 花朵：简单的 5 边形圆盘稍微旋转
+      [STRAWBERRY_STAGE.FLOWER]: new THREE.CylinderGeometry(0.2, 0.1, 0.08, 5).toNonIndexed(),
+      [STRAWBERRY_STAGE.FRUIT]: fruitGeo.toNonIndexed()
     },
     materials: {
-      [STRAWBERRY_STAGE.SEED]: new THREE.MeshStandardMaterial({ color: 0xbd9052, roughness: 0.85, metalness: 0.01 }),
-      [STRAWBERRY_STAGE.SPROUT]: new THREE.MeshStandardMaterial({ color: 0x67b45a, roughness: 0.8, metalness: 0.01 }),
-      [STRAWBERRY_STAGE.GROWTH]: new THREE.MeshStandardMaterial({ color: 0x2f8a41, roughness: 0.76, metalness: 0.01 }),
-      [STRAWBERRY_STAGE.FLOWER]: new THREE.MeshStandardMaterial({ color: 0xf6f1dc, roughness: 0.7, metalness: 0.01, side: THREE.DoubleSide }),
-      [STRAWBERRY_STAGE.FRUIT]: new THREE.MeshStandardMaterial({ color: 0xc91d3c, roughness: 0.62, metalness: 0.03 })
+      [STRAWBERRY_STAGE.SEED]: new THREE.MeshStandardMaterial({ color: 0x8a6036, roughness: 0.9, flatShading: true }),
+      [STRAWBERRY_STAGE.SPROUT]: new THREE.MeshStandardMaterial({ color: 0x93d96c, roughness: 0.7, flatShading: true }),
+      [STRAWBERRY_STAGE.GROWTH]: new THREE.MeshStandardMaterial({ color: 0x48a846, roughness: 0.8, flatShading: true }),
+      [STRAWBERRY_STAGE.FLOWER]: new THREE.MeshStandardMaterial({ color: 0xfffbee, roughness: 0.6, flatShading: true }),
+      [STRAWBERRY_STAGE.FRUIT]: new THREE.MeshStandardMaterial({ color: 0xed3e4c, roughness: 0.4, metalness: 0.1, flatShading: true })
     }
   };
 

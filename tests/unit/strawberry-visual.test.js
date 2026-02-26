@@ -7,7 +7,21 @@ function createFakeThree() {
     constructor(name, ...args) {
       this.name = name;
       this.args = args;
+      this.attributes = {
+        position: {
+          count: 2,
+          getX: () => 0,
+          getY: () => 0,
+          getZ: () => 0,
+          setX: () => {},
+          setY: () => {},
+          setZ: () => {},
+          setXYZ: () => {}
+        }
+      };
     }
+    toNonIndexed() { return this; }
+    computeVertexNormals() {}
   }
 
   class FakeMaterial {
@@ -27,16 +41,12 @@ function createFakeThree() {
         super('cone', ...args);
       }
     },
-    IcosahedronGeometry: class extends FakeGeometry {
+    CylinderGeometry: class extends FakeGeometry {
       constructor(...args) {
-        super('icosahedron', ...args);
+        super('cylinder', ...args);
       }
     },
-    CircleGeometry: class extends FakeGeometry {
-      constructor(...args) {
-        super('circle', ...args);
-      }
-    },
+    Material: FakeMaterial,
     MeshStandardMaterial: class extends FakeMaterial {},
     DoubleSide: 'double-side'
   };

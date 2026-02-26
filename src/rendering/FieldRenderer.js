@@ -23,21 +23,21 @@ const TILE_COLORS = {
 };
 
 const STAGE_SCALE = {
-  seed: 0.3,
-  sprout: 0.6,
-  growth: 0.8,
-  flower: 0.9,
+  seed: 1.0,
+  sprout: 1.0,
+  growth: 1.0,
+  flower: 1.0,
   fruit: 1.0,
-  withered: 0.8
+  withered: 1.0
 };
 
 const STAGE_Y = {
-  seed: 0.0,
-  sprout: 0.0,
-  growth: 0.0,
-  flower: 0.0,
-  fruit: 0.0,
-  withered: 0.0
+  seed: 0.13,
+  sprout: 0.13,
+  growth: 0.13,
+  flower: 0.13,
+  fruit: 0.13,
+  withered: 0.13
 };
 
 function cropStageToKey(crop) {
@@ -143,9 +143,9 @@ export class FieldRenderer {
         const world = this.gridSystem.tileToWorld(row, col);
 
         this.dummy.position.set(world.x, STAGE_Y[key], world.z);
-        // 让贴图永远面向相机的方向（或者是固定视角倾斜），这是 Billboard 的核心
-        // 由于是 Isometric 俯视，我们也可以让平面仰贴、然后倾斜对着镜头（如按 X 轴转 45~60 度）
-        this.dummy.rotation.set(-Math.PI / 4, 0, 0);
+        // 原生 3D 模型赋予每次种植不同的随机水平朝向，增加自然度
+        const randomYRot = (row * cols + col) * 0.5;
+        this.dummy.rotation.set(0, randomYRot, 0);
 
         this.dummy.scale.setScalar(STAGE_SCALE[key]);
         this.dummy.updateMatrix();

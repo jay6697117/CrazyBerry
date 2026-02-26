@@ -610,7 +610,10 @@ export class GameManager {
 
     const economyBeforeRepay = this.shopSystem.getEconomyState();
     const seedBudgetReserve = AUTO_FARM_POLICY.SEED_MIN_BATCH * ECONOMY.SEED_PRICE;
-    const reserveTotal = AUTO_FARM_POLICY.OPERATING_CASH_RESERVE + seedBudgetReserve + expansionReserve;
+    let reserveTotal = AUTO_FARM_POLICY.OPERATING_CASH_RESERVE + seedBudgetReserve + expansionReserve;
+    if (economyBeforeRepay.loanDebtTotal > 0) {
+      reserveTotal = ECONOMY.SEED_PRICE;
+    }
     const repayable = Math.max(0, economyBeforeRepay.coins - reserveTotal);
     if (repayable > 0 && economyBeforeRepay.loanDebtTotal > 0) {
       const repaid = this.shopSystem.repayLoan(repayable);

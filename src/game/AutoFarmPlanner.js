@@ -67,6 +67,7 @@ export function collectTasks({
     AUTO_FARM_POLICY.HOE_EMPTY_BUFFER_MAX
   );
   const allowHoeTask = !debtOutstanding && tilledEmptyCount < targetEmptyBuffer;
+
   const dynamicPriorities = waterIsUrgent
     ? { ...TASK_PRIORITIES }
     : { ...TASK_PRIORITIES, seed: 2, water: 3 };

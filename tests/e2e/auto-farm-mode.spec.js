@@ -98,23 +98,15 @@ test('auto farm borrows working capital and later repays debt', async ({ page })
 
   await page.evaluate(() => {
     const api = window.__crazyberry;
-    const tiles = [
-      [0, 0], [0, 1], [0, 2], [0, 3], [0, 4],
-      [1, 0], [1, 1], [1, 2], [1, 3], [1, 4]
-    ];
+    api.forceTool('hoe');
+    api.performAction(0, 0);
 
-    // Spend all initial coins on seeds.
-    for (const [row, col] of tiles) {
-      api.forceTool('hoe');
-      api.performAction(row, col);
+    // Drain initial coins while keeping only one tilled-empty tile.
+    for (let i = 0; i < 10; i += 1) {
       api.forceTool('seed');
-      api.performAction(row, col);
-    }
-
-    // Clear a small subset to create seed demand while keeping harvest pipeline alive.
-    for (const [row, col] of tiles.slice(0, 2)) {
+      api.performAction(0, 0);
       api.forceTool('shovel');
-      api.performAction(row, col);
+      api.performAction(0, 0);
     }
 
     api.forceTool(null);

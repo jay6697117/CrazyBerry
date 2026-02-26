@@ -51,9 +51,10 @@ export function collectTasks({
   const tilledEmptyCount = Math.max(0, Math.floor(fieldStats.tilledEmptyCount ?? 0));
   const unwateredGrowingCount = Math.max(0, Math.floor(fieldStats.unwateredGrowingCount ?? 0));
   const clampedTimeRatio = Math.max(0, Math.min(0.9999, Number(timeRatio ?? 0)));
+  const highTimePressure = Boolean(strategyState.highTimePressure);
   const waterIsUrgent = (
     unwateredGrowingCount > 0 &&
-    clampedTimeRatio >= AUTO_FARM_POLICY.WATER_URGENT_TIME_RATIO
+    (highTimePressure || clampedTimeRatio >= AUTO_FARM_POLICY.WATER_URGENT_TIME_RATIO)
   );
   const debtOutstanding = Boolean(strategyState.debtOutstanding) || totalDebt > 0;
   const highDebtPressure = Boolean(strategyState.highDebtPressure) || debtOutstanding || (

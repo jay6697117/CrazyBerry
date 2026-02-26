@@ -23,6 +23,7 @@ function createFakeThree() {
     toNonIndexed() { return this; }
     computeVertexNormals() {}
     rotateX() { return this; }
+    translate() { return this; }
   }
 
   class FakeMaterial {
@@ -32,14 +33,14 @@ function createFakeThree() {
   }
 
   return {
-    SphereGeometry: class extends FakeGeometry {
+    PlaneGeometry: class extends FakeGeometry {
       constructor(...args) {
-        super('sphere', ...args);
+        super('plane', ...args);
       }
     },
-    ConeGeometry: class extends FakeGeometry {
+    CapsuleGeometry: class extends FakeGeometry {
       constructor(...args) {
-        super('cone', ...args);
+        super('capsule', ...args);
       }
     },
     CylinderGeometry: class extends FakeGeometry {
@@ -47,8 +48,20 @@ function createFakeThree() {
         super('cylinder', ...args);
       }
     },
-    Material: FakeMaterial,
+    LatheGeometry: class extends FakeGeometry {
+      constructor(...args) {
+        super('lathe', ...args);
+      }
+    },
+    Vector2: class {
+      constructor(x, y) { this.x = x; this.y = y; }
+    },
+    CanvasTexture: class {
+      constructor() {}
+    },
+    MeshBasicMaterial: class extends FakeMaterial {},
     MeshStandardMaterial: class extends FakeMaterial {},
+    MeshPhysicalMaterial: class extends FakeMaterial {},
     DoubleSide: 'double-side'
   };
 }

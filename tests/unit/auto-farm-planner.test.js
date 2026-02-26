@@ -145,6 +145,34 @@ test('collectTasks prioritizes water over seed when watering becomes urgent', ()
   assert.equal(tasks[1].type, 'seed');
 });
 
+test('collectTasks prioritizes water over seed under high time pressure even before urgency window', () => {
+  const grid = new GridSystem({ rows: 1, cols: 2, tileSize: 1.2 });
+  const crops = new CropSystem();
+
+  grid.tillTile(0, 0); // seed candidate
+  grid.tillTile(0, 1);
+  grid.plantTile(0, 1, 'strawberry'); // water candidate
+  crops.plant('0,1', 1);
+
+  const tasks = collectTasks({
+    gridSystem: grid,
+    cropSystem: crops,
+    playerPosition: { x: 0, z: 0 },
+    economyState: { seedCount: 10, coins: 100 },
+    seedPrice: 10,
+    timeRatio: 0.1,
+    fieldStats: {
+      activeCropCount: 1,
+      tilledEmptyCount: 1,
+      unwateredGrowingCount: 1
+    },
+    strategyState: { highTimePressure: true }
+  });
+
+  assert.equal(tasks[0].type, 'water');
+  assert.equal(tasks[1].type, 'seed');
+});
+
 test('collectTasks suppresses hoe tasks when tilled-empty buffer is already full', () => {
   const grid = new GridSystem({ rows: 2, cols: 2, tileSize: 1.2 });
   const crops = new CropSystem();

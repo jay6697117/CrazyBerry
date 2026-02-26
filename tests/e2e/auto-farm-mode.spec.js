@@ -189,3 +189,33 @@ test('auto farm avoids unrecoverable deadlock at high speed and engages speed gu
   expect(outcome.runtime.timeMultiplier).toBe(1);
   expect(outcome.runtime.lastSpeedGuardDay).toBeGreaterThan(0);
 });
+
+test('auto farm keeps selected 32x when field is still recoverable', async ({ page }) => {
+  await page.goto('/?debug=1');
+  await page.waitForFunction(() => Boolean(window.__crazyberry));
+
+  await page.evaluate(() => {
+    const api = window.__crazyberry;
+    const tiles = [
+      [0, 0], [0, 1], [0, 2], [0, 3], [0, 4],
+      [1, 0], [1, 1], [1, 2], [1, 3], [1, 4]
+    ];
+
+    for (const [row, col] of tiles) {
+      api.setCropStage(row, col, 2, false);
+    }
+
+    api.setTimeMultiplier(32);
+    api.setAutoFarmEnabled(true);
+    api.simulateTicks(120, 0.1);
+  });
+
+  const outcome = await page.evaluate(() => ({
+    runtime: window.__crazyberry.getAutoRuntimeState(),
+    autoEnabled: window.__crazyberry.getAutoFarmStatus().enabled
+  }));
+
+  expect(outcome.autoEnabled).toBe(true);
+  expect(outcome.runtime.timeMultiplier).toBe(32);
+  expect(outcome.runtime.lastSpeedGuardDay).toBe(0);
+});

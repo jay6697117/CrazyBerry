@@ -19,26 +19,15 @@ test('time speed button is clickable and cycles multiplier', async ({ page }) =>
   const speedBtn = page.locator('[data-testid="time-speed-btn"]');
   await expect(speedBtn).toHaveText('1x');
 
-  await speedBtn.click();
-  await expect(speedBtn).toHaveText('2x');
+  const expectedSequence = [
+    2, 4, 8, 16, 24, 32, 48, 64,
+    48, 32, 24, 16, 8, 4, 2, 1, 2
+  ];
 
-  await speedBtn.click();
-  await expect(speedBtn).toHaveText('4x');
-
-  await speedBtn.click();
-  await expect(speedBtn).toHaveText('8x');
-
-  await speedBtn.click();
-  await expect(speedBtn).toHaveText('16x');
-
-  await speedBtn.click();
-  await expect(speedBtn).toHaveText('32x');
-
-  await speedBtn.click();
-  await expect(speedBtn).toHaveText('64x');
-
-  await speedBtn.click();
-  await expect(speedBtn).toHaveText('1x');
+  for (const expectedMultiplier of expectedSequence) {
+    await speedBtn.click();
+    await expect(speedBtn).toHaveText(`${expectedMultiplier}x`);
+  }
 
   const interceptedErrors = errorMessages.filter((msg) => /intercepts pointer events/i.test(msg));
   expect(interceptedErrors).toEqual([]);

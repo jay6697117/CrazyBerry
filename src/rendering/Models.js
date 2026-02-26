@@ -18,25 +18,21 @@ function createInstanced(THREE, geometry, material, maxCount, { castShadow, rece
 export function getSharedTileGeometry(THREE) {
   const cacheKey = key('tileGeo');
   if (!geometryCache.has(cacheKey)) {
-    // 带有分段的 Box，用于制作多边形表面
-    const geo = new THREE.BoxGeometry(0.96, 0.35, 0.96, 2, 1, 2);
+    const geo = new THREE.BoxGeometry(0.96, 0.35, 0.96, 6, 1, 6);
     const pos = geo.attributes.position;
     for (let i = 0; i < pos.count; i++) {
-      // 仅对顶部顶点做抖动
       if (pos.getY(i) > 0) {
-        pos.setY(i, pos.getY(i) + (Math.random() - 0.5) * 0.08);
-        pos.setX(i, pos.getX(i) + (Math.random() - 0.5) * 0.04);
-        pos.setZ(i, pos.getZ(i) + (Math.random() - 0.5) * 0.04);
+        const ridge = Math.sin(pos.getX(i) * Math.PI * 4) * 0.04;
+        const noise = (Math.random() - 0.5) * 0.05;
+        pos.setY(i, pos.getY(i) + ridge + noise);
+        pos.setX(i, pos.getX(i) + (Math.random() - 0.5) * 0.02);
+        pos.setZ(i, pos.getZ(i) + (Math.random() - 0.5) * 0.02);
       }
     }
     geo.computeVertexNormals();
-    const flatGeo = geo.toNonIndexed();
-    flatGeo.computeVertexNormals();
+    geo.translate(0, -0.05, 0);
 
-    // 平移使其底部贴近 0，原先 y是中心点
-    flatGeo.translate(0, -0.05, 0);
-
-    geometryCache.set(cacheKey, flatGeo);
+    geometryCache.set(cacheKey, geo);
   }
   return geometryCache.get(cacheKey);
 }
@@ -47,10 +43,9 @@ export function getSharedTileMaterial(THREE) {
     materialCache.set(
       cacheKey,
       new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        flatShading: true,
-        roughness: 0.9,
-        metalness: 0.02
+        color: 0x3d2817,
+        roughness: 1.0,
+        metalness: 0.0
       })
     );
   }
@@ -60,7 +55,8 @@ export function getSharedTileMaterial(THREE) {
 export function getSharedIndicatorGeometry(THREE) {
   const cacheKey = key('indicatorGeo');
   if (!geometryCache.has(cacheKey)) {
-    geometryCache.set(cacheKey, new THREE.CircleGeometry(0.13, 8));
+    const geo = new THREE.TorusGeometry(0.18, 0.05, 16, 32);
+    geometryCache.set(cacheKey, geo);
   }
   return geometryCache.get(cacheKey);
 }
@@ -70,11 +66,15 @@ function getIndicatorMaterial(THREE, name, color) {
   if (!materialCache.has(cacheKey)) {
     materialCache.set(
       cacheKey,
-      new THREE.MeshBasicMaterial({
+      new THREE.MeshPhysicalMaterial({
         color,
-        transparent: true,
+        transmission: 0.5,
         opacity: 0.9,
-        side: THREE.DoubleSide
+        transparent: true,
+        roughness: 0.2,
+        metalness: 0.1,
+        emissive: color,
+        emissiveIntensity: 0.6
       })
     );
   }
@@ -88,53 +88,125 @@ export function createTileInstancedMesh(THREE, maxCount) {
   });
 }
 
-function createStageMesh(THREE, stage, maxCount) {
-  const visuals = createStageVisualFactory(THREE);
-  return createInstanced(THREE, visuals.geometries[stage], visuals.materials[stage], maxCount, {
-    castShadow: true,
-    receiveShadow: false
-  });
+function createTextureFromCanvas(drawFn, size = 128) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  drawFn(ctx, size);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.premultiplyAlpha = true;
+  return texture;
+}
+
+// 采用占位图案用于暂时代替真实贴图，留出接口后续替换为加载图片
+function getStageTexture(THREE, stage) {
+  const key = `stageTex_${stage}`;
+  if (!materialCache.has(key)) {
+    const tex = createTextureFromCanvas((ctx, size) => {
+      ctx.clearRect(0, 0, size, size);
+      const cx = size / 2, cy = size / 2;
+
+      switch(stage) {
+        case STRAWBERRY_STAGE.SEED:
+          ctx.fillStyle = '#8c6e4e';
+          ctx.beginPath(); ctx.arc(cx, cy, size*0.1, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#ffffff'; ctx.font = '20px sans-serif'; ctx.fillText('种子', cx-20, cy+5);
+          break;
+        case STRAWBERRY_STAGE.SPROUT:
+          ctx.fillStyle = '#76c94b';
+          ctx.beginPath();
+          ctx.moveTo(cx, cy+size*0.3); ctx.lineTo(cx-size*0.3, cy-size*0.1); ctx.lineTo(cx, cy-size*0.3); ctx.lineTo(cx+size*0.3, cy-size*0.1);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff'; ctx.font = '20px sans-serif'; ctx.fillText('芽', cx-10, cy+5);
+          break;
+        case STRAWBERRY_STAGE.GROWTH:
+          ctx.fillStyle = '#2e822a';
+          ctx.beginPath();
+          ctx.moveTo(cx, cy+size*0.4); ctx.lineTo(cx-size*0.4, cy); ctx.lineTo(cx, cy-size*0.4); ctx.lineTo(cx+size*0.4, cy);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff'; ctx.font = '20px sans-serif'; ctx.fillText('大叶', cx-20, cy+5);
+          break;
+        case STRAWBERRY_STAGE.FLOWER:
+          ctx.fillStyle = '#2e822a';
+          ctx.beginPath(); ctx.arc(cx, cy+size*0.2, size*0.3, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          for(let i=0; i<5; i++) {
+            const a = i/5*Math.PI*2;
+            const px = cx + Math.cos(a)*size*0.15, py = cy-size*0.1 + Math.sin(a)*size*0.15;
+            ctx.beginPath(); ctx.arc(px, py, size*0.1, 0, Math.PI*2); ctx.fill();
+          }
+          ctx.fillStyle = '#ffff00'; ctx.beginPath(); ctx.arc(cx, cy-size*0.1, size*0.08, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#000000'; ctx.font = '20px sans-serif'; ctx.fillText('花', cx-10, cy-size*0.1+5);
+          break;
+        case STRAWBERRY_STAGE.FRUIT:
+          ctx.fillStyle = '#2e822a'; ctx.beginPath(); ctx.arc(cx, cy-size*0.3, size*0.2, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#e82531';
+          ctx.beginPath(); ctx.moveTo(cx, cy+size*0.3); ctx.bezierCurveTo(cx-size*0.3, cy+size*0.1, cx-size*0.4, cy-size*0.2, cx, cy-size*0.3);
+          ctx.bezierCurveTo(cx+size*0.4, cy-size*0.2, cx+size*0.3, cy+size*0.1, cx, cy+size*0.3); ctx.fill();
+          ctx.fillStyle = '#ffffff'; ctx.font = '20px sans-serif'; ctx.fillText('果实', cx-20, cy);
+          break;
+        case 'withered':
+          ctx.fillStyle = '#5a5348';
+          ctx.beginPath();
+          ctx.moveTo(cx, cy+size*0.3); ctx.lineTo(cx-size*0.3, cy); ctx.lineTo(cx, cy-size*0.3); ctx.lineTo(cx+size*0.3, cy);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff'; ctx.font = '20px sans-serif'; ctx.fillText('枯萎', cx-20, cy+5);
+          break;
+      }
+    });
+    materialCache.set(key, tex);
+  }
+  return materialCache.get(key);
+}
+
+function getSpriteMaterial(THREE, stageKey) {
+  const cacheKey = `spriteMat_${stageKey}`;
+  if (!materialCache.has(cacheKey)) {
+    materialCache.set(cacheKey, new THREE.MeshBasicMaterial({
+      map: getStageTexture(THREE, stageKey),
+      transparent: true,
+      alphaTest: 0.1,
+      side: THREE.DoubleSide
+    }));
+  }
+  return materialCache.get(cacheKey);
+}
+
+// 统一使用的面片几何体用于 InstancedMesh
+function getBillboardGeometry(THREE) {
+  const cacheKey = key('billboardGeo');
+  if (!geometryCache.has(cacheKey)) {
+    const geo = new THREE.PlaneGeometry(1, 1);
+    // 底部对齐
+    geo.translate(0, 0.5, 0);
+    geometryCache.set(cacheKey, geo);
+  }
+  return geometryCache.get(cacheKey);
 }
 
 export function createSeedInstancedMesh(THREE, maxCount) {
-  return createStageMesh(THREE, STRAWBERRY_STAGE.SEED, maxCount);
+  return createInstanced(THREE, getBillboardGeometry(THREE), getSpriteMaterial(THREE, STRAWBERRY_STAGE.SEED), maxCount, { castShadow: true, receiveShadow: false });
 }
 
 export function createSproutInstancedMesh(THREE, maxCount) {
-  return createStageMesh(THREE, STRAWBERRY_STAGE.SPROUT, maxCount);
+  return createInstanced(THREE, getBillboardGeometry(THREE), getSpriteMaterial(THREE, STRAWBERRY_STAGE.SPROUT), maxCount, { castShadow: true, receiveShadow: false });
 }
 
 export function createGrowthInstancedMesh(THREE, maxCount) {
-  return createStageMesh(THREE, STRAWBERRY_STAGE.GROWTH, maxCount);
+  return createInstanced(THREE, getBillboardGeometry(THREE), getSpriteMaterial(THREE, STRAWBERRY_STAGE.GROWTH), maxCount, { castShadow: true, receiveShadow: false });
 }
 
 export function createFlowerInstancedMesh(THREE, maxCount) {
-  return createStageMesh(THREE, STRAWBERRY_STAGE.FLOWER, maxCount);
+  return createInstanced(THREE, getBillboardGeometry(THREE), getSpriteMaterial(THREE, STRAWBERRY_STAGE.FLOWER), maxCount, { castShadow: true, receiveShadow: false });
 }
 
 export function createFruitInstancedMesh(THREE, maxCount) {
-  return createStageMesh(THREE, STRAWBERRY_STAGE.FRUIT, maxCount);
+  return createInstanced(THREE, getBillboardGeometry(THREE), getSpriteMaterial(THREE, STRAWBERRY_STAGE.FRUIT), maxCount, { castShadow: true, receiveShadow: false });
 }
 
 export function createWitheredInstancedMesh(THREE, maxCount) {
-  const cacheKey = key('witheredMat');
-  if (!materialCache.has(cacheKey)) {
-    materialCache.set(
-      cacheKey,
-      new THREE.MeshStandardMaterial({
-        color: 0x5a5348,
-        roughness: 0.9,
-        metalness: 0,
-        flatShading: true
-      })
-    );
-  }
-
-  const visuals = createStageVisualFactory(THREE);
-  return createInstanced(THREE, visuals.geometries[STRAWBERRY_STAGE.GROWTH], materialCache.get(cacheKey), maxCount, {
-    castShadow: false,
-    receiveShadow: false
-  });
+  return createInstanced(THREE, getBillboardGeometry(THREE), getSpriteMaterial(THREE, 'withered'), maxCount, { castShadow: true, receiveShadow: false });
 }
 
 export function createWaterIndicatorMesh(THREE, maxCount) {

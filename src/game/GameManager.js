@@ -79,6 +79,49 @@ function stageToGrowthDays(stage) {
   return CROP_STAGE_THRESHOLDS[0];
 }
 
+const TIME_MULTIPLIER_STEPS = [1, 2, 4, 8, 16, 24, 32, 48, 64];
+
+function getNearestTimeMultiplierStep(multiplier) {
+  const numericMultiplier = Number(multiplier);
+  if (!Number.isFinite(numericMultiplier)) {
+    return TIME_MULTIPLIER_STEPS[0];
+  }
+
+  let nearestStep = TIME_MULTIPLIER_STEPS[0];
+  let nearestDistance = Math.abs(TIME_MULTIPLIER_STEPS[0] - numericMultiplier);
+
+  for (let i = 1; i < TIME_MULTIPLIER_STEPS.length; i += 1) {
+    const step = TIME_MULTIPLIER_STEPS[i];
+    const distance = Math.abs(step - numericMultiplier);
+    if (distance < nearestDistance) {
+      nearestStep = step;
+      nearestDistance = distance;
+    }
+  }
+
+  return nearestStep;
+}
+
+function computeNextTimeMultiplier(currentMultiplier, direction) {
+  const normalizedDirection = direction === -1 ? -1 : 1;
+  const currentStep = getNearestTimeMultiplierStep(currentMultiplier);
+  const maxIndex = TIME_MULTIPLIER_STEPS.length - 1;
+  const currentIndex = TIME_MULTIPLIER_STEPS.indexOf(currentStep);
+
+  let nextDirection = normalizedDirection;
+  if (currentIndex <= 0) {
+    nextDirection = 1;
+  } else if (currentIndex >= maxIndex) {
+    nextDirection = -1;
+  }
+
+  const nextIndex = Math.max(0, Math.min(maxIndex, currentIndex + nextDirection));
+  return {
+    nextMultiplier: TIME_MULTIPLIER_STEPS[nextIndex],
+    nextDirection
+  };
+}
+
 export class GameManager {
   constructor({ headless = false, rng = Math.random } = {}) {
     this.headless = headless;
@@ -99,6 +142,7 @@ export class GameManager {
     this.running = false;
     this.lastTimeMs = 0;
     this.timeMultiplier = 1;
+    this.timeSpeedDirection = 1;
     this.autoFarmEnabled = false;
     this.autoTarget = null;
     this.autoActionCooldownSeconds = 0;
@@ -151,10 +195,12 @@ export class GameManager {
       this.input = new Input(window, document);
       this.hud = new HUD(document, {
         onTimeSpeedUp: () => {
-          this.timeMultiplier *= 2;
-          if (this.timeMultiplier > 64) {
-            this.timeMultiplier = 1;
-          }
+          const { nextMultiplier, nextDirection } = computeNextTimeMultiplier(
+            this.timeMultiplier,
+            this.timeSpeedDirection
+          );
+          this.timeMultiplier = nextMultiplier;
+          this.timeSpeedDirection = nextDirection;
           this.syncUi();
         }
       });
@@ -292,7 +338,8 @@ export class GameManager {
     }
 
     if (this.autoFarmEnabled) {
-      this.runAutoFarm(deltaSeconds);
+      const autoDeltaSeconds = deltaSeconds * this.timeMultiplier;
+      this.runAutoFarm(autoDeltaSeconds);
     } else {
       if (hasMovementInput) {
         if (this.camera?.getWorldDirection) {
@@ -407,6 +454,7 @@ export class GameManager {
     this.autoRiskLevel = 'stable';
     this.autoLastSpeedGuardDay = 0;
     this.timeMultiplier = 1;
+    this.timeSpeedDirection = 1;
 
     this.manualTool = null;
     this.toolbar.setAutoFarmEnabled(false);
@@ -495,15 +543,17 @@ export class GameManager {
     return this.autoRiskLevel;
   }
 
-  applyAutoSpeedGuard(fieldStats) {
+  applyAutoSpeedGuard(fieldStats, economyState) {
     if (this.timeMultiplier <= 1) return false;
-    const pressureDetected = (
-      fieldStats.unwateredGrowingCount >= this.gridSystem.cols ||
-      this.autoRiskLevel === 'stressed'
+    const noRecoverySignal = (
+      economyState.coins < ECONOMY.SEED_PRICE &&
+      economyState.seedCount === 0 &&
+      fieldStats.activeCropCount === 0
     );
-    if (!pressureDetected) return false;
+    if (!noRecoverySignal) return false;
 
     this.timeMultiplier = 1;
+    this.timeSpeedDirection = 1;
     this.autoLastSpeedGuardDay = this.timeSystem.getDayNumber();
     this.currentHint = 'Auto risk control: speed -> 1x';
     return true;
@@ -657,7 +707,7 @@ export class GameManager {
     const initialFieldStats = this.getFieldStats();
     const initialEconomyState = this.shopSystem.getEconomyState();
     this.updateAutoRiskLevel(initialFieldStats, initialEconomyState);
-    this.applyAutoSpeedGuard(initialFieldStats);
+    this.applyAutoSpeedGuard(initialFieldStats, initialEconomyState);
 
     this.runAutoShopIfNeeded(initialFieldStats);
 
@@ -675,7 +725,8 @@ export class GameManager {
       fieldStats,
       strategyState: {
         debtOutstanding: economyState.loanDebtTotal > 0,
-        highDebtPressure: economyState.loanDebtTotal > 0 && this.autoRiskLevel === 'stressed'
+        highDebtPressure: economyState.loanDebtTotal > 0 && this.autoRiskLevel === 'stressed',
+        highTimePressure: this.timeMultiplier >= 32
       }
     });
     const nextTask = pickNextTask(tasks);

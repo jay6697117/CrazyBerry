@@ -18,67 +18,84 @@ export function resolveStageFromGrowthDays(growthDays) {
   return STRAWBERRY_STAGE.SEED;
 }
 
-function createLowPolySphere(THREE, radius, heightSegments, widthSegments) {
-  const geo = new THREE.SphereGeometry(radius, widthSegments, heightSegments);
+function createRosetteLeaves(THREE, radius, height, numLeaves, droop) {
+  const geo = new THREE.CylinderGeometry(radius, 0.02, height, 32, 5, false);
+  geo.translate(0, height / 2, 0);
   const pos = geo.attributes.position;
-  // 给顶点加一点随机噪声
-  for(let i=0; i<pos.count; i++) {
-    pos.setXYZ(i,
-      pos.getX(i) + (Math.random()-0.5)*radius*0.15,
-      pos.getY(i) + (Math.random()-0.5)*radius*0.15,
-      pos.getZ(i) + (Math.random()-0.5)*radius*0.15
-    );
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const z = pos.getZ(i);
+    const y = pos.getY(i);
+    const dist = Math.sqrt(x * x + z * z);
+    if (dist < 0.01 && y < 0.01) continue;
+    const angle = Math.atan2(z, x);
+    const leafWave = Math.cos(angle * numLeaves);
+    const leafShape = Math.max(0, leafWave);
+    const newDist = dist * (0.2 + 0.8 * Math.pow(leafShape, 1.5));
+    const ratio = dist > 0 ? newDist / dist : 0;
+    if (dist > 0) {
+      pos.setX(i, x * ratio);
+      pos.setZ(i, z * ratio);
+    }
+    pos.setY(i, y - (newDist * droop * leafShape) + (Math.random() - 0.5) * 0.015);
   }
-  return geo.toNonIndexed();
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function createStrawberryFruit(THREE) {
+  const points = [];
+  for (let i = 0; i <= 24; i++) {
+    const t = i / 24;
+    const y = t * 0.35;
+    let r = Math.sin(t * Math.PI) * 0.18;
+    if (t > 0.4) r += (t - 0.4) * 0.15;
+    points.push(new THREE.Vector2(r === 0 ? 0.001 : r, y));
+  }
+  const geo = new THREE.LatheGeometry(points, 32);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    if (y < 0.02 || y > 0.33) continue;
+    const noise = Math.sin(pos.getX(i) * 60) * Math.cos(pos.getZ(i) * 60) * Math.sin(y * 50);
+    if (noise > 0.6) {
+      pos.setX(i, pos.getX(i) * 0.95);
+      pos.setZ(i, pos.getZ(i) * 0.95);
+    }
+  }
+  geo.translate(0, -0.15, 0);
+  geo.computeVertexNormals();
+  return geo;
 }
 
 export function createStageVisualFactory(THREE) {
-  if (stageVisualCache.has(THREE)) {
-    return stageVisualCache.get(THREE);
-  }
+  if (stageVisualCache.has(THREE)) return stageVisualCache.get(THREE);
 
-  // 构建自定义形状
-  // 果实：顶部宽，底部尖
-  const fruitGeo = new THREE.CylinderGeometry(0.18, 0.05, 0.35, 12, 1);
-  const fPos = fruitGeo.attributes.position;
-  // 添加微小的随机位移使草莓更自然
-  for(let i=0; i<fPos.count; i++) {
-    fPos.setY(i, fPos.getY(i) + (Math.random()-0.5)*0.02);
-    fPos.setX(i, fPos.getX(i) + (Math.random()-0.5)*0.03);
-    fPos.setZ(i, fPos.getZ(i) + (Math.random()-0.5)*0.03);
-  }
-  fruitGeo.computeVertexNormals();
+  const seedGeo = new THREE.CapsuleGeometry(0.04, 0.06, 8, 16);
+  seedGeo.rotateX(Math.PI / 2);
 
-  // 幼苗与植物底座：多层结构拼凑成一簇
-  const leafBaseGeo = new THREE.ConeGeometry(0.15, 0.25, 6);
-  leafBaseGeo.rotateX(Math.PI / 12);
-  const leafLayer2 = new THREE.ConeGeometry(0.2, 0.3, 7);
-  leafLayer2.rotateX(-Math.PI / 6);
-  const growthLeaves = new THREE.ConeGeometry(0.28, 0.4, 8);
-  growthLeaves.rotateX(-Math.PI / 8);
-
-  // 花期：带有小花瓣的形状
-  const flowerGeo = new THREE.CylinderGeometry(0.2, 0.08, 0.08, 8).toNonIndexed();
-  const petalPos = flowerGeo.attributes.position;
-  for(let i=0; i<petalPos.count; i++) {
-    petalPos.setY(i, petalPos.getY(i) + (Math.random()-0.5)*0.04);
-  }
-  flowerGeo.computeVertexNormals();
+  const flowerGeo = createRosetteLeaves(THREE, 0.18, 0.05, 5, 0.1);
 
   const visuals = {
     geometries: {
-      [STRAWBERRY_STAGE.SEED]: createLowPolySphere(THREE, 0.08, 6, 6),
-      [STRAWBERRY_STAGE.SPROUT]: leafBaseGeo.toNonIndexed(),
-      [STRAWBERRY_STAGE.GROWTH]: growthLeaves.toNonIndexed(),
+      [STRAWBERRY_STAGE.SEED]: seedGeo,
+      [STRAWBERRY_STAGE.SPROUT]: createRosetteLeaves(THREE, 0.25, 0.15, 3, 0.4),
+      [STRAWBERRY_STAGE.GROWTH]: createRosetteLeaves(THREE, 0.4, 0.3, 5, 0.5),
       [STRAWBERRY_STAGE.FLOWER]: flowerGeo,
-      [STRAWBERRY_STAGE.FRUIT]: fruitGeo.toNonIndexed()
+      [STRAWBERRY_STAGE.FRUIT]: createStrawberryFruit(THREE)
     },
     materials: {
-      [STRAWBERRY_STAGE.SEED]: new THREE.MeshStandardMaterial({ color: 0x5a3e23, roughness: 0.9, flatShading: true }),
-      [STRAWBERRY_STAGE.SPROUT]: new THREE.MeshStandardMaterial({ color: 0x8ced5c, roughness: 0.6, flatShading: true }),
-      [STRAWBERRY_STAGE.GROWTH]: new THREE.MeshStandardMaterial({ color: 0x3d9c3a, roughness: 0.7, flatShading: true }),
-      [STRAWBERRY_STAGE.FLOWER]: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, flatShading: true }),
-      [STRAWBERRY_STAGE.FRUIT]: new THREE.MeshStandardMaterial({ color: 0xff2a40, roughness: 0.2, metalness: 0.15, flatShading: true })
+      [STRAWBERRY_STAGE.SEED]: new THREE.MeshStandardMaterial({ color: 0xddbc82, roughness: 0.9 }),
+      [STRAWBERRY_STAGE.SPROUT]: new THREE.MeshStandardMaterial({ color: 0x76c94b, roughness: 0.6 }),
+      [STRAWBERRY_STAGE.GROWTH]: new THREE.MeshStandardMaterial({ color: 0x2e822a, roughness: 0.7 }),
+      [STRAWBERRY_STAGE.FLOWER]: new THREE.MeshStandardMaterial({ color: 0xfffcf0, roughness: 0.3 }),
+      [STRAWBERRY_STAGE.FRUIT]: new THREE.MeshPhysicalMaterial({
+        color: 0xee1122,
+        roughness: 0.25,
+        metalness: 0.05,
+        clearcoat: 0.8,
+        clearcoatRoughness: 0.2
+      })
     }
   };
 

@@ -23,21 +23,21 @@ const TILE_COLORS = {
 };
 
 const STAGE_SCALE = {
-  seed: 0.8,
-  sprout: 1.2,
-  growth: 1.1,
-  flower: 1.4,
-  fruit: 1.2,
-  withered: 1
+  seed: 0.3,
+  sprout: 0.6,
+  growth: 0.8,
+  flower: 0.9,
+  fruit: 1.0,
+  withered: 0.8
 };
 
 const STAGE_Y = {
-  seed: 0.12,
-  sprout: 0.28,
-  growth: 0.22,
-  flower: 0.26,
-  fruit: 0.35,
-  withered: 0.22
+  seed: 0.0,
+  sprout: 0.0,
+  growth: 0.0,
+  flower: 0.0,
+  fruit: 0.0,
+  withered: 0.0
 };
 
 function cropStageToKey(crop) {
@@ -130,6 +130,7 @@ export class FieldRenderer {
     };
 
     const { rows, cols } = this.gridSystem;
+    const camera = this.scene.parent ? this.scene.parent.children.find(c => c.isCamera) || window.mainCamera : window.mainCamera;
 
     for (let row = 0; row < rows; row += 1) {
       for (let col = 0; col < cols; col += 1) {
@@ -142,9 +143,10 @@ export class FieldRenderer {
         const world = this.gridSystem.tileToWorld(row, col);
 
         this.dummy.position.set(world.x, STAGE_Y[key], world.z);
-        // 不再强制转倒，而是给一个随机的 Y 轴水平旋转来增加真实感
-        const randomYRot = (row * cols + col) * 0.5;
-        this.dummy.rotation.set(0, randomYRot, 0);
+        // 让贴图永远面向相机的方向（或者是固定视角倾斜），这是 Billboard 的核心
+        // 由于是 Isometric 俯视，我们也可以让平面仰贴、然后倾斜对着镜头（如按 X 轴转 45~60 度）
+        this.dummy.rotation.set(-Math.PI / 4, 0, 0);
+
         this.dummy.scale.setScalar(STAGE_SCALE[key]);
         this.dummy.updateMatrix();
         mesh.setMatrixAt(slot, this.dummy.matrix);

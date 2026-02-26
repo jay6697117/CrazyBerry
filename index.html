@@ -178,7 +178,7 @@
         bottom: 16px;
         transform: translateX(-50%);
         display: grid;
-        grid-template-columns: repeat(7, minmax(0, auto));
+        grid-template-columns: repeat(8, minmax(0, auto));
         align-items: center;
         gap: 8px;
         padding: 10px;
@@ -189,7 +189,8 @@
       }
 
       .tool-slot,
-      #open-shop {
+      #open-shop,
+      #toggle-auto-farm {
         position: relative;
         width: 56px;
         height: 56px;
@@ -202,6 +203,17 @@
       }
 
       .tool-slot[data-active='true'] {
+        background: linear-gradient(180deg, #ffe7af, var(--slot-active));
+        border-color: rgba(154, 95, 31, 0.38);
+      }
+
+      #toggle-auto-farm {
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+      }
+
+      #toggle-auto-farm[data-active='true'] {
         background: linear-gradient(180deg, #ffe7af, var(--slot-active));
         border-color: rgba(154, 95, 31, 0.38);
       }
@@ -288,10 +300,15 @@
         }
 
         .tool-slot,
-        #open-shop {
+        #open-shop,
+        #toggle-auto-farm {
           width: 48px;
           height: 48px;
           font-size: 20px;
+        }
+
+        #toggle-auto-farm {
+          font-size: 10px;
         }
       }
 
@@ -322,12 +339,12 @@
 
       <div id="hud">
         <div class="hud-stack">
-          <div class="hud-day-pill" data-testid="hud-day">Day 1</div>
+          <div class="hud-day-pill" data-testid="hud-day">第 1 天</div>
           <div class="hud-time-card">
             <div class="hud-time-main">
-              <div data-testid="hud-clock">06:00 am</div>
+              <div data-testid="hud-clock">上午 06:00</div>
               <div class="hud-phase-row">
-                <div data-testid="hud-phase">Morning</div>
+                <div data-testid="hud-phase">清晨</div>
                 <button id="time-speed-btn" data-testid="time-speed-btn">1x</button>
               </div>
             </div>
@@ -337,13 +354,13 @@
 
         <div class="hud-stack">
           <div class="hud-economy">
-            <div class="hud-row"><span>Coins</span><strong data-testid="hud-coins">100</strong></div>
-            <div class="hud-row"><span>Strawberry</span><strong data-testid="hud-strawberry">0</strong></div>
+            <div class="hud-row"><span>金币</span><strong data-testid="hud-coins">100</strong></div>
+            <div class="hud-row"><span>草莓</span><strong data-testid="hud-strawberry">0</strong></div>
           </div>
         </div>
       </div>
 
-      <div id="hint" data-testid="hud-hint">WASD move, SPACE act, click tile</div>
+      <div id="hint" data-testid="hud-hint">WASD 移动，空格键操作，点击地块</div>
 
       <div id="toolbar">
         <button class="tool-slot" data-testid="tool-hoe" data-tool="hoe" data-active="false">🪓</button>
@@ -354,25 +371,26 @@
         <button class="tool-slot" data-testid="tool-water" data-tool="water" data-active="false">💧</button>
         <button class="tool-slot" data-testid="tool-hand" data-tool="hand" data-active="false">✋</button>
         <button class="tool-slot" data-testid="tool-shovel" data-tool="shovel" data-active="false">🧹</button>
+        <button id="toggle-auto-farm" data-testid="toggle-auto-farm" data-active="false" aria-pressed="false">AUTO</button>
         <button id="open-shop" data-testid="open-shop">🛒</button>
-        <div data-testid="toolbar-active">Tool: auto</div>
+        <div data-testid="toolbar-active">工具：自动</div>
       </div>
 
       <section id="shop-modal" data-testid="shop-modal" data-open="false">
-        <button id="shop-close" type="button">Close</button>
-        <h3>Shop</h3>
+        <button id="shop-close" type="button">关闭</button>
+        <h3>商店</h3>
         <div class="shop-grid">
           <article class="shop-card">
-            <h4>Buy</h4>
-            <button data-shop-action="buy-seed" type="button">Seed (10)</button>
-            <button data-shop-action="buy-can" type="button">Watering Upgrade (200)</button>
-            <button data-shop-action="buy-expand" type="button">Expand Farm +1 Row (500)</button>
+            <h4>购买</h4>
+            <button data-shop-action="buy-seed" type="button">种子 (10)</button>
+            <button data-shop-action="buy-can" type="button">升级水壶 (200)</button>
+            <button data-shop-action="buy-expand" type="button">扩建农场 +1 行 (500)</button>
           </article>
           <article class="shop-card">
-            <h4>Sell</h4>
-            <button data-shop-action="sell-normal" type="button">Sell Normal Strawberry (25)</button>
-            <button data-shop-action="sell-premium" type="button">Sell Premium Strawberry (50)</button>
-            <div data-testid="shop-stock">Stock: normal 0 / premium 0</div>
+            <h4>出售</h4>
+            <button data-shop-action="sell-normal" type="button">出售普通草莓 (25)</button>
+            <button data-shop-action="sell-premium" type="button">出售优质草莓 (50)</button>
+            <div data-testid="shop-stock">库存：普通 0 / 优质 0</div>
           </article>
         </div>
       </section>

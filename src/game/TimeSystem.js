@@ -64,8 +64,8 @@ export class TimeSystem {
     const current = Math.floor((base + this.getElapsedRatio() * dayMinutes) % dayMinutes);
     const hour24 = Math.floor(current / 60);
     const minute = current % 60;
-    const suffix = hour24 >= 12 ? 'pm' : 'am';
+    const prefix = hour24 >= 12 ? '下午' : '上午';
     const hour12 = hour24 % 12 || 12;
-    return `${String(hour12).padStart(2, '0')}:${String(minute).padStart(2, '0')} ${suffix}`;
+    return `${prefix} ${String(hour12).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
   }
 }

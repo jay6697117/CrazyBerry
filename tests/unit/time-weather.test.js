@@ -22,11 +22,11 @@ test('clock label is derived from time ratio', () => {
   const time = new TimeSystem({ dayDurationSeconds: 100 });
 
   time.setTimeRatio(0);
-  assert.equal(time.getClockLabel(), '06:00 am');
+  assert.equal(time.getClockLabel(), '上午 06:00');
 
   time.setTimeRatio(0.5);
-  assert.equal(time.getClockLabel(), '06:00 pm');
+  assert.equal(time.getClockLabel(), '下午 06:00');
 
   time.setTimeRatio(0.75);
-  assert.equal(time.getClockLabel(), '12:00 am');
+  assert.equal(time.getClockLabel(), '上午 12:00');
 });

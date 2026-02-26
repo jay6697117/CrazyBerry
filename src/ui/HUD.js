@@ -15,8 +15,10 @@ export class HUD {
   }
 
   setState({ dayNumber, phase, clockLabel, weatherIcon, coins, strawberryCount, hint, timeSpeedMultiplier }) {
-    if (this.day) this.day.textContent = `Day ${dayNumber}`;
-    if (this.phase) this.phase.textContent = phase;
+    if (this.day) this.day.textContent = `第 ${dayNumber} 天`;
+    const phaseMap = { 'Morning': '清晨', 'Noon': '中午', 'Dusk': '黄昏', 'Night': '夜晚' };
+    const displayPhase = phaseMap[phase] || phase;
+    if (this.phase) this.phase.textContent = displayPhase;
     if (this.clock) this.clock.textContent = clockLabel;
     if (this.weather) this.weather.textContent = weatherIcon;
     if (this.coins) this.coins.textContent = `${coins}`;

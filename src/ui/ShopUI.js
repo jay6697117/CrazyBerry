@@ -27,7 +27,7 @@ export class ShopUI {
 
   setState(economyState) {
     if (!this.stock) return;
-    this.stock.textContent = `Stock: normal ${economyState.normalStrawberry} / premium ${economyState.premiumStrawberry}`;
+    this.stock.textContent = `库存：普通 ${economyState.normalStrawberry} / 优质 ${economyState.premiumStrawberry}`;
   }
 
   open() {

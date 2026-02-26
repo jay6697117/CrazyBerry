@@ -49,6 +49,10 @@ export class Input {
     this.onKeyUp = (event) => this.#handleKey(event.key, false);
     this.onPointerDown = (event) => {
       if (event.button !== 0) return;
+      if (event.target instanceof Element) {
+        const insideUi = event.target.closest('#toolbar, #shop-modal, #hud, #hint');
+        if (insideUi) return;
+      }
       this.pointer = { x: event.clientX, y: event.clientY };
     };
 

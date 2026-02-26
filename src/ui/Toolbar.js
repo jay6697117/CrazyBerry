@@ -4,7 +4,10 @@ export class Toolbar {
     this.toolButtons = root ? Array.from(root.querySelectorAll('[data-tool]')) : [];
     this.seedCounter = root?.querySelector('[data-testid="toolbar-seeds"]') ?? null;
     this.activeToolLabel = root?.querySelector('[data-testid="toolbar-active"]') ?? null;
+    this.autoFarmButton = root?.querySelector('[data-testid="toggle-auto-farm"]') ?? null;
     this.onToolSelected = null;
+    this.onAutoFarmToggle = null;
+    this.autoFarmEnabled = false;
 
     for (const button of this.toolButtons) {
       button.addEventListener('click', () => {
@@ -13,10 +16,26 @@ export class Toolbar {
         if (this.onToolSelected) this.onToolSelected(tool);
       });
     }
+
+    this.autoFarmButton?.addEventListener('click', () => {
+      const next = !this.autoFarmEnabled;
+      if (this.onAutoFarmToggle) this.onAutoFarmToggle(next);
+    });
   }
 
   setOnToolSelected(handler) {
     this.onToolSelected = handler;
+  }
+
+  setOnAutoFarmToggle(handler) {
+    this.onAutoFarmToggle = handler;
+  }
+
+  setAutoFarmEnabled(enabled) {
+    this.autoFarmEnabled = Boolean(enabled);
+    if (!this.autoFarmButton) return;
+    this.autoFarmButton.dataset.active = String(this.autoFarmEnabled);
+    this.autoFarmButton.setAttribute('aria-pressed', String(this.autoFarmEnabled));
   }
 
   setActiveTool(tool) {
@@ -25,7 +44,15 @@ export class Toolbar {
     }
 
     if (this.activeToolLabel) {
-      this.activeToolLabel.textContent = tool ? `Tool: ${tool}` : 'Tool: auto';
+      const toolMap = {
+        'hoe': '锄头',
+        'seed': '种子',
+        'water': '水壶',
+        'shovel': '镰刀',
+        'hand': '小手'
+      };
+      const displayTool = tool ? toolMap[tool] || tool : '自动';
+      this.activeToolLabel.textContent = `工具：${displayTool}`;
     }
   }
 

@@ -6,6 +6,7 @@ import { SaveSystem } from './SaveSystem.js';
 import { ShopSystem } from './ShopSystem.js';
 import { TimeSystem } from './TimeSystem.js';
 import { ToolAdvisor } from './ToolAdvisor.js';
+import { collectTasks, pickNextTask, computeSeedPurchaseCount } from './AutoFarmPlanner.js';
 import { createNoopEffects, EffectsSystem } from '../rendering/Effects.js';
 import { FieldRenderer } from '../rendering/FieldRenderer.js';
 import { createSceneSetup } from '../rendering/SceneSetup.js';
@@ -16,6 +17,7 @@ import { computeMoveVector, Input } from '../utils/Input.js';
 import {
   ACTION_SOUND_TYPES,
   CROP_STAGE_THRESHOLDS,
+  ECONOMY,
   GRID_COLS,
   GRID_MAX_ROWS,
   GRID_ROWS,
@@ -46,7 +48,9 @@ function createHeadlessInputStub() {
 function createHeadlessToolbarStub() {
   return {
     setActiveTool() {},
+    setAutoFarmEnabled() {},
     setOnToolSelected() {},
+    setOnAutoFarmToggle() {},
     setEconomyState() {}
   };
 }
@@ -88,11 +92,18 @@ export class GameManager {
     this.effects = createNoopEffects();
 
     this.manualTool = null;
-    this.currentHint = 'WASD move, SPACE act, click tile';
+    this.currentHint = 'WASD 移动，空格键操作，点击地块';
     this.pendingFieldRefresh = true;
     this.running = false;
     this.lastTimeMs = 0;
     this.timeMultiplier = 1;
+    this.autoFarmEnabled = false;
+    this.autoTarget = null;
+    this.autoActionCooldownSeconds = 0;
+    this.autoTradeCooldownSeconds = 0;
+    this.autoActionCount = 0;
+    this.autoTradeCount = 0;
+    this.autoArrivalDistance = 0.16;
     this.player = new Player({ headless: true, speed: 4 });
   }
 
@@ -145,34 +156,41 @@ export class GameManager {
       this.toolbar = new Toolbar(document.getElementById('toolbar'));
       this.toolbar.setOnToolSelected((tool) => {
         this.manualTool = tool;
+        if (this.autoFarmEnabled) {
+          this.setAutoFarmEnabled(false, 'manual');
+        }
         this.toolbar.setActiveTool(tool);
       });
+      this.toolbar.setOnAutoFarmToggle((enabled) => {
+        this.setAutoFarmEnabled(enabled, 'toolbar');
+      });
+      this.toolbar.setAutoFarmEnabled(false);
 
       this.shopUI = new ShopUI(document.getElementById('shop-modal'), {
         onBuySeeds: (count) => {
           const success = this.shopSystem.buySeed(count);
-          if (!success) this.currentHint = 'Not enough coins for seeds';
+          if (!success) this.currentHint = '金币不足，无法购买种子';
           this.syncUi();
         },
         onBuyCan: () => {
           const success = this.shopSystem.buyWateringCanUpgrade();
-          if (!success) this.currentHint = 'Not enough coins for watering upgrade';
+          if (!success) this.currentHint = '金币不足，无法升级水壶';
           this.syncUi();
         },
         onBuyExpand: () => {
           if (this.gridSystem.rows >= GRID_MAX_ROWS) {
-            this.currentHint = 'Farm already at max rows';
+            this.currentHint = '农场已达到最大行数';
             this.syncUi();
             return;
           }
 
           const success = this.shopSystem.buyFarmExpansion();
           if (!success) {
-            this.currentHint = 'Not enough coins for expansion';
+            this.currentHint = '金币不足，无法扩建农场';
           } else {
             this.gridSystem.expandRows(1);
             this.pendingFieldRefresh = true;
-            this.currentHint = 'Farm expanded by +1 row';
+            this.currentHint = '农场已扩建 +1 行';
           }
           this.syncUi();
         },
@@ -247,32 +265,44 @@ export class GameManager {
     this.updateLighting(timeState.phase);
 
     const movement = this.input.getMovementState();
-    if (movement.up || movement.down || movement.left || movement.right) {
-      if (this.camera?.getWorldDirection) {
-        this.camera.getWorldDirection(this.cameraForward);
+    const hasMovementInput = movement.up || movement.down || movement.left || movement.right;
+    const actionQueued = this.input.consumeActionKey();
+    const pointer = this.input.consumePointer();
+    const hasManualInput = hasMovementInput || actionQueued || Boolean(pointer);
+
+    if (this.autoFarmEnabled && hasManualInput) {
+      this.setAutoFarmEnabled(false, 'manual');
+    }
+
+    if (this.autoFarmEnabled) {
+      this.runAutoFarm(deltaSeconds);
+    } else {
+      if (hasMovementInput) {
+        if (this.camera?.getWorldDirection) {
+          this.camera.getWorldDirection(this.cameraForward);
+        }
+
+        const move = computeMoveVector({
+          input: movement,
+          cameraForward: this.cameraForward,
+          speed: this.player.speed,
+          dt: deltaSeconds
+        });
+
+        this.player.translate(move.x, move.z);
+        this.player.faceDirection(move.x, move.z);
+        this.clampPlayerToFarm();
       }
 
-      const move = computeMoveVector({
-        input: movement,
-        cameraForward: this.cameraForward,
-        speed: this.player.speed,
-        dt: deltaSeconds
-      });
+      if (actionQueued) {
+        const tile = this.gridSystem.worldToTile(this.player.position.x, this.player.position.z);
+        if (tile) this.performPrimaryAction(tile.row, tile.col);
+      }
 
-      this.player.translate(move.x, move.z);
-      this.player.faceDirection(move.x, move.z);
-      this.clampPlayerToFarm();
-    }
-
-    if (this.input.consumeActionKey()) {
-      const tile = this.gridSystem.worldToTile(this.player.position.x, this.player.position.z);
-      if (tile) this.performPrimaryAction(tile.row, tile.col);
-    }
-
-    const click = this.input.consumePointer();
-    if (click) {
-      const tile = this.screenToTile(click.x, click.y);
-      if (tile) this.performPrimaryAction(tile.row, tile.col);
+      if (pointer) {
+        const tile = this.screenToTile(pointer.x, pointer.y);
+        if (tile) this.performPrimaryAction(tile.row, tile.col);
+      }
     }
 
     this.effects.update(deltaSeconds);
@@ -316,6 +346,139 @@ export class GameManager {
     }
   }
 
+  setAutoFarmEnabled(enabled, reason = 'toggle') {
+    const nextEnabled = Boolean(enabled);
+    if (this.autoFarmEnabled === nextEnabled) return;
+
+    this.autoFarmEnabled = nextEnabled;
+    this.autoTarget = null;
+    this.autoActionCooldownSeconds = 0;
+    this.autoTradeCooldownSeconds = 0;
+
+    if (nextEnabled) {
+      this.manualTool = null;
+      this.currentHint = 'Auto farm enabled';
+      this.toolbar.setActiveTool(null);
+    } else if (reason === 'manual') {
+      this.currentHint = 'Manual control resumed';
+    } else {
+      this.currentHint = 'Auto farm disabled';
+    }
+
+    this.toolbar.setAutoFarmEnabled(nextEnabled);
+    this.syncUi();
+  }
+
+  countTilledEmptyTiles() {
+    let total = 0;
+    for (let row = 0; row < this.gridSystem.rows; row += 1) {
+      for (let col = 0; col < this.gridSystem.cols; col += 1) {
+        const tile = this.gridSystem.getTile(row, col);
+        if (!tile) continue;
+        if (tile.soilState === 'tilled' && tile.cropId === null) {
+          total += 1;
+        }
+      }
+    }
+    return total;
+  }
+
+  runAutoShopIfNeeded() {
+    if (this.autoTradeCooldownSeconds > 0) return;
+
+    let changed = false;
+    const economy = this.shopSystem.getEconomyState();
+
+    if (economy.normalStrawberry > 0 || economy.premiumStrawberry > 0) {
+      const sold = this.shopSystem.sellStrawberry({
+        normalCount: economy.normalStrawberry,
+        premiumCount: economy.premiumStrawberry
+      });
+      if (sold) {
+        changed = true;
+        this.autoTradeCount += 1;
+      }
+    }
+
+    const economyAfterSell = this.shopSystem.getEconomyState();
+    const buyCount = computeSeedPurchaseCount({
+      tilledEmptyCount: this.countTilledEmptyTiles(),
+      seedCount: economyAfterSell.seedCount,
+      coins: economyAfterSell.coins,
+      seedPrice: ECONOMY.SEED_PRICE,
+      maxBuyCount: this.gridSystem.cols
+    });
+
+    if (buyCount > 0) {
+      const bought = this.shopSystem.buySeed(buyCount);
+      if (bought) {
+        changed = true;
+        this.autoTradeCount += 1;
+      }
+    }
+
+    if (changed) {
+      this.autoTradeCooldownSeconds = 0.5;
+      this.currentHint = 'Auto traded in shop';
+    }
+  }
+
+  movePlayerTowards(targetX, targetZ, deltaSeconds) {
+    const dx = targetX - this.player.position.x;
+    const dz = targetZ - this.player.position.z;
+    const distance = Math.hypot(dx, dz);
+
+    if (distance <= this.autoArrivalDistance) {
+      this.player.setPosition(targetX, this.player.position.y, targetZ);
+      return true;
+    }
+
+    const maxStep = this.player.speed * deltaSeconds;
+    const ratio = Math.min(1, maxStep / distance);
+    const moveX = dx * ratio;
+    const moveZ = dz * ratio;
+
+    this.player.translate(moveX, moveZ);
+    this.player.faceDirection(moveX, moveZ);
+    this.clampPlayerToFarm();
+    return false;
+  }
+
+  runAutoFarm(deltaSeconds) {
+    this.autoActionCooldownSeconds = Math.max(0, this.autoActionCooldownSeconds - deltaSeconds);
+    this.autoTradeCooldownSeconds = Math.max(0, this.autoTradeCooldownSeconds - deltaSeconds);
+
+    this.runAutoShopIfNeeded();
+
+    const tasks = collectTasks({
+      gridSystem: this.gridSystem,
+      cropSystem: this.cropSystem,
+      playerPosition: this.player.position
+    });
+    const nextTask = pickNextTask(tasks);
+
+    if (!nextTask) {
+      this.autoTarget = null;
+      this.toolbar.setActiveTool(null);
+      this.currentHint = 'Auto farm waiting for tasks';
+      return;
+    }
+
+    this.autoTarget = { type: nextTask.type, row: nextTask.row, col: nextTask.col };
+    this.toolbar.setActiveTool(null);
+
+    const arrived = this.movePlayerTowards(nextTask.worldX, nextTask.worldZ, deltaSeconds);
+    if (!arrived || this.autoActionCooldownSeconds > 0) return;
+
+    const result = this.performPrimaryAction(nextTask.row, nextTask.col);
+    if (result.success) {
+      this.autoActionCount += 1;
+    }
+    this.autoActionCooldownSeconds = 0.12;
+    this.autoTarget = null;
+    this.toolbar.setActiveTool(null);
+  }
+
   performPrimaryAction(row, col) {
     const tile = this.gridSystem.getTile(row, col);
     if (!tile) return { success: false, tool: TOOL_TYPES.HAND };
@@ -330,7 +493,7 @@ export class GameManager {
     if (tool === TOOL_TYPES.HOE) {
       success = this.gridSystem.tillTile(row, col);
       if (success) {
-        this.currentHint = 'Tile tilled';
+        this.currentHint = '已开垦地块';
         this.audioSystem.playAction(ACTION_SOUND_TYPES.TILL);
       }
     }
@@ -339,7 +502,7 @@ export class GameManager {
       if (!this.shopSystem.consumeSeed(1)) {
         const purchased = this.shopSystem.buySeed(1);
         if (!purchased) {
-          this.currentHint = 'Not enough coins for seeds';
+          this.currentHint = '金币不足，无法购买种子';
           this.syncUi();
           return { success: false, tool };
         }
@@ -351,9 +514,9 @@ export class GameManager {
         this.cropSystem.plant(tileKey, this.timeSystem.getDayNumber());
         this.audioSystem.playAction(ACTION_SOUND_TYPES.PLANT);
         success = true;
-        this.currentHint = 'Seed planted';
+        this.currentHint = '已播种种子';
       } else {
-        this.currentHint = 'Cannot plant here';
+        this.currentHint = '无法在这里种植';
       }
     }
 
@@ -363,7 +526,7 @@ export class GameManager {
         this.cropSystem.water(tileKey);
         this.effects.spawnWaterSplash(world.x, 0.26, world.z);
         this.audioSystem.playAction(ACTION_SOUND_TYPES.WATER);
-        this.currentHint = 'Watered';
+        this.currentHint = '已浇水';
       }
     }
 
@@ -371,7 +534,7 @@ export class GameManager {
       this.cropSystem.remove(tileKey);
       success = this.gridSystem.clearTile(row, col);
       if (success) {
-        this.currentHint = 'Withered crop cleared';
+        this.currentHint = '已清理枯萎的作物';
         this.audioSystem.playAction(ACTION_SOUND_TYPES.TILL);
       }
     }
@@ -383,12 +546,16 @@ export class GameManager {
         this.gridSystem.clearTile(row, col);
         this.effects.spawnHarvestSparkle(world.x, 0.5, world.z);
         this.audioSystem.playAction(ACTION_SOUND_TYPES.HARVEST);
-        this.currentHint = `Harvested ${result.quality} strawberry`;
+        this.currentHint = `收获了 ${result.quality === 'premium' ? '优质' : '普通'}草莓`;
         success = true;
       }
     }
 
-    this.toolbar.setActiveTool(tool);
+    if (this.autoFarmEnabled) {
+      this.toolbar.setActiveTool(null);
+    } else {
+      this.toolbar.setActiveTool(tool);
+    }
     this.pendingFieldRefresh = true;
     this.syncUi();
     return { success, tool };
@@ -398,7 +565,7 @@ export class GameManager {
     const wateredTileKeys = this.gridSystem.getWateredTileKeys();
     this.cropSystem.advanceDay(this.timeSystem.getDayNumber(), wateredTileKeys);
     this.gridSystem.resetWaterFlags();
-    this.currentHint = `Day ${this.timeSystem.getDayNumber()} started`;
+    this.currentHint = `第 ${this.timeSystem.getDayNumber()} 天开始了`;
     this.pendingFieldRefresh = true;
     this.saveSystem.save(this.getSnapshot());
   }
@@ -440,6 +607,7 @@ export class GameManager {
       timeSpeedMultiplier: this.timeMultiplier
     });
 
+    this.toolbar.setAutoFarmEnabled(this.autoFarmEnabled);
     this.toolbar.setEconomyState(economyState);
     this.shopUI.setState(economyState);
   }
@@ -496,7 +664,20 @@ export class GameManager {
         this.timeSystem.setDayNumber(dayNumber);
         this.syncUi();
       },
+      setAutoFarmEnabled: (enabled) => {
+        this.setAutoFarmEnabled(enabled, 'debug');
+        return this.autoFarmEnabled;
+      },
+      getAutoFarmStatus: () => ({
+        enabled: this.autoFarmEnabled,
+        target: this.autoTarget ? { ...this.autoTarget } : null,
+        actionCount: this.autoActionCount,
+        tradeCount: this.autoTradeCount
+      }),
       forceTool: (tool) => {
+        if (this.autoFarmEnabled) {
+          this.setAutoFarmEnabled(false, 'manual');
+        }
         this.manualTool = tool;
         this.toolbar.setActiveTool(tool);
       },

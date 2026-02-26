@@ -12,25 +12,75 @@ export class Player {
     this.THREE = THREE;
     this.group = new THREE.Group();
 
-    const body = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.2, 0.55, 4, 8),
-      new THREE.MeshStandardMaterial({ color: 0x4d8f7a, flatShading: true })
-    );
-    body.position.y = 0.55;
+    const skinMat = new THREE.MeshStandardMaterial({ color: 0xdfa077, flatShading: true }); // 晒黑的皮肤
+    const pantsMat = new THREE.MeshStandardMaterial({ color: 0x3c5a7a, flatShading: true }); // 蓝色工装裤
+    const shirtMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, flatShading: true }); // 白汗衫
+    const hatMat = new THREE.MeshStandardMaterial({ color: 0xd4a350, flatShading: true }); // 草帽
+    const shoeMat = new THREE.MeshStandardMaterial({ color: 0x4a3b2c, flatShading: true }); // 棕色鞋子
 
-    const head = new THREE.Mesh(
-      new THREE.SphereGeometry(0.2, 10, 8),
-      new THREE.MeshStandardMaterial({ color: 0xf7d9b4, flatShading: true })
-    );
-    head.position.y = 1.08;
+    // 为了让脚底更贴近地面 (地形 y=0.125 左右)，将模型整体下移 0.6
+    const offsetY = -0.6;
 
-    const hat = new THREE.Mesh(
-      new THREE.ConeGeometry(0.34, 0.15, 8),
-      new THREE.MeshStandardMaterial({ color: 0xd9b356, flatShading: true })
-    );
-    hat.position.y = 1.23;
+    const shoeGeo = new THREE.BoxGeometry(0.14, 0.1, 0.18);
+    const shoeLeft = new THREE.Mesh(shoeGeo, shoeMat);
+    shoeLeft.position.set(-0.1, 0.05 + offsetY, 0.02);
+    const shoeRight = new THREE.Mesh(shoeGeo, shoeMat);
+    shoeRight.position.set(0.1, 0.05 + offsetY, 0.02);
 
-    this.group.add(body, head, hat);
+    const pantsGeo = new THREE.BoxGeometry(0.28, 0.3, 0.18);
+    const pants = new THREE.Mesh(pantsGeo, pantsMat);
+    pants.position.set(0, 0.25 + offsetY, 0);
+
+    const shirtGeo = new THREE.BoxGeometry(0.3, 0.35, 0.2);
+    const shirt = new THREE.Mesh(shirtGeo, shirtMat);
+    shirt.position.set(0, 0.575 + offsetY, 0);
+
+    const suspenderGeo = new THREE.BoxGeometry(0.06, 0.36, 0.21);
+    const suspenderL = new THREE.Mesh(suspenderGeo, pantsMat);
+    suspenderL.position.set(-0.08, 0.575 + offsetY, 0);
+    const suspenderR = new THREE.Mesh(suspenderGeo, pantsMat);
+    suspenderR.position.set(0.08, 0.575 + offsetY, 0);
+
+    const headGeo = new THREE.BoxGeometry(0.28, 0.3, 0.28);
+    const head = new THREE.Mesh(headGeo, skinMat);
+    head.position.set(0, 0.9 + offsetY, 0);
+
+    const noseGeo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
+    const nose = new THREE.Mesh(noseGeo, skinMat);
+    nose.position.set(0, 0.88 + offsetY, 0.15);
+
+    const armGeo = new THREE.BoxGeometry(0.1, 0.3, 0.1);
+    const armLeft = new THREE.Mesh(armGeo, skinMat);
+    armLeft.position.set(-0.21, 0.6 + offsetY, 0);
+    const armRight = new THREE.Mesh(armGeo, skinMat);
+    armRight.position.set(0.21, 0.6 + offsetY, 0);
+
+    const hatGroup = new THREE.Group();
+    const brimGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.05, 12);
+    const brim = new THREE.Mesh(brimGeo, hatMat);
+    const topGeo = new THREE.CylinderGeometry(0.16, 0.18, 0.15, 12);
+    const cone = new THREE.Mesh(topGeo, hatMat);
+    cone.position.y = 0.1;
+    hatGroup.add(brim, cone);
+    hatGroup.position.set(0, 1.05 + offsetY, 0);
+    hatGroup.rotation.x = -0.1; // 稍微后倾
+
+    this.group.add(
+      shoeLeft, shoeRight,
+      pants,
+      shirt, suspenderL, suspenderR,
+      head, nose,
+      armLeft, armRight,
+      hatGroup
+    );
+
+    // 开启阴影
+    this.group.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
     this.group.position.set(this.position.x, this.position.y, this.position.z);
   }
 

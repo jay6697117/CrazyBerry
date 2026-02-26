@@ -31,7 +31,9 @@ test('collectTasks sorts by priority: harvest > shovel > seed > water > hoe', ()
   const tasks = collectTasks({
     gridSystem: grid,
     cropSystem: crops,
-    playerPosition: { x: 0, z: 0 }
+    playerPosition: { x: 0, z: 0 },
+    economyState: { seedCount: 1, coins: 0 },
+    seedPrice: 10
   });
 
   assert.equal(tasks[0].type, 'harvest');
@@ -48,7 +50,9 @@ test('pickNextTask chooses nearest when priorities are equal', () => {
   const tasks = collectTasks({
     gridSystem: grid,
     cropSystem: crops,
-    playerPosition: { x: 1.15, z: 0 }
+    playerPosition: { x: 1.15, z: 0 },
+    economyState: { seedCount: 1, coins: 0 },
+    seedPrice: 10
   });
 
   const next = pickNextTask(tasks);
@@ -56,6 +60,27 @@ test('pickNextTask chooses nearest when priorities are equal', () => {
   assert.equal(next.type, 'hoe');
   assert.equal(next.row, 0);
   assert.equal(next.col, 2);
+});
+
+test('collectTasks skips seed tasks when no seeds and coins are below seed price', () => {
+  const grid = new GridSystem({ rows: 1, cols: 2, tileSize: 1.2 });
+  const crops = new CropSystem();
+
+  grid.tillTile(0, 0); // seed candidate
+  grid.tillTile(0, 1);
+  grid.plantTile(0, 1, 'strawberry'); // water candidate
+  crops.plant('0,1', 1);
+
+  const tasks = collectTasks({
+    gridSystem: grid,
+    cropSystem: crops,
+    playerPosition: { x: 0, z: 0 },
+    economyState: { seedCount: 0, coins: 5 },
+    seedPrice: 10
+  });
+
+  assert.equal(tasks[0].type, 'water');
+  assert.equal(tasks.some((task) => task.type === 'seed'), false);
 });
 
 test('computeSeedPurchaseCount applies demand, budget, and max-buy constraints', () => {

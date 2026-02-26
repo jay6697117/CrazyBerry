@@ -6,10 +6,10 @@ const TASK_PRIORITIES = Object.freeze({
   hoe: 4
 });
 
-function getTaskType(tile, crop) {
+function getTaskType(tile, crop, { canSeedNow }) {
   if (crop?.harvestable) return 'harvest';
   if (crop?.isWithered) return 'shovel';
-  if (tile.soilState === 'tilled' && tile.cropId === null) return 'seed';
+  if (tile.soilState === 'tilled' && tile.cropId === null && canSeedNow) return 'seed';
   if (tile.cropId !== null && !tile.wateredToday && !crop?.harvestable && !crop?.isWithered) return 'water';
   if (tile.soilState === 'grass') return 'hoe';
   return null;
@@ -22,10 +22,15 @@ function compareTasks(left, right) {
   return left.col - right.col;
 }
 
-export function collectTasks({ gridSystem, cropSystem, playerPosition }) {
+export function collectTasks({ gridSystem, cropSystem, playerPosition, economyState, seedPrice }) {
   const tasks = [];
   const px = Number(playerPosition?.x ?? 0);
   const pz = Number(playerPosition?.z ?? 0);
+  const hasEconomyContext = Boolean(economyState);
+  const normalizedSeedPrice = Math.max(1, Math.floor(seedPrice ?? 1));
+  const seedCount = Math.max(0, Math.floor(economyState?.seedCount ?? 0));
+  const coins = Math.max(0, Math.floor(economyState?.coins ?? 0));
+  const canSeedNow = !hasEconomyContext || seedCount > 0 || coins >= normalizedSeedPrice;
 
   for (let row = 0; row < gridSystem.rows; row += 1) {
     for (let col = 0; col < gridSystem.cols; col += 1) {
@@ -33,7 +38,7 @@ export function collectTasks({ gridSystem, cropSystem, playerPosition }) {
       if (!tile) continue;
 
       const crop = cropSystem.getCrop(`${row},${col}`);
-      const type = getTaskType(tile, crop);
+      const type = getTaskType(tile, crop, { canSeedNow });
       if (!type) continue;
 
       const world = gridSystem.tileToWorld(row, col);

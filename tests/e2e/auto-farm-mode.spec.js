@@ -34,3 +34,57 @@ test('auto farm moves player, runs task loop, and yields to manual input', async
   const statusAfterManual = await page.evaluate(() => window.__crazyberry.getAutoFarmStatus());
   expect(statusAfterManual.enabled).toBe(false);
 });
+
+test('auto farm waters crops when seeds are unavailable and unaffordable', async ({ page }) => {
+  await page.goto('/?debug=1');
+  await page.waitForFunction(() => Boolean(window.__crazyberry));
+
+  await page.evaluate(() => {
+    const api = window.__crazyberry;
+    const spendTiles = [
+      [0, 0], [0, 1], [0, 2], [0, 3], [0, 4],
+      [1, 0], [1, 1], [1, 2], [1, 3], [1, 4]
+    ];
+
+    for (const [row, col] of spendTiles) {
+      api.forceTool('hoe');
+      api.performAction(row, col);
+      api.forceTool('seed');
+      api.performAction(row, col);
+    }
+
+    api.setCropStage(5, 5, 2, false);
+
+    api.forceTool('hoe');
+    api.performAction(4, 5);
+    api.forceTool(null);
+
+    api.setAutoFarmEnabled(true);
+  });
+
+  await page.waitForFunction(() => {
+    const state = window.__crazyberry.getState();
+    return state.grid.tiles[5][5].wateredToday === true;
+  });
+
+  const result = await page.evaluate(() => {
+    const state = window.__crazyberry.getState();
+    const status = window.__crazyberry.getAutoFarmStatus();
+    const hint = document.querySelector('[data-testid="hud-hint"]')?.textContent ?? '';
+    return {
+      wateredToday: state.grid.tiles[5][5].wateredToday,
+      coins: state.economy.coins,
+      seedCount: state.economy.seedCount,
+      autoEnabled: status.enabled,
+      actionCount: status.actionCount,
+      hint
+    };
+  });
+
+  expect(result.wateredToday).toBe(true);
+  expect(result.autoEnabled).toBe(true);
+  expect(result.actionCount).toBeGreaterThan(0);
+  expect(result.coins).toBe(0);
+  expect(result.seedCount).toBe(0);
+  expect(result.hint).not.toContain('金币不足，无法购买种子');
+});

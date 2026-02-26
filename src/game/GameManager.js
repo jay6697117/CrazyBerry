@@ -449,11 +449,14 @@ export class GameManager {
     this.autoTradeCooldownSeconds = Math.max(0, this.autoTradeCooldownSeconds - deltaSeconds);
 
     this.runAutoShopIfNeeded();
+    const economyState = this.shopSystem.getEconomyState();
 
     const tasks = collectTasks({
       gridSystem: this.gridSystem,
       cropSystem: this.cropSystem,
-      playerPosition: this.player.position
+      playerPosition: this.player.position,
+      economyState,
+      seedPrice: ECONOMY.SEED_PRICE
     });
     const nextTask = pickNextTask(tasks);
 

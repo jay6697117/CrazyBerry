@@ -84,7 +84,116 @@ test('auto farm waters crops when seeds are unavailable and unaffordable', async
   expect(result.wateredToday).toBe(true);
   expect(result.autoEnabled).toBe(true);
   expect(result.actionCount).toBeGreaterThan(0);
-  expect(result.coins).toBe(0);
-  expect(result.seedCount).toBe(0);
   expect(result.hint).not.toContain('金币不足，无法购买种子');
+  expect(result.coins).toBeGreaterThanOrEqual(0);
+  expect(result.seedCount).toBeGreaterThanOrEqual(0);
+});
+
+test('auto farm borrows working capital and later repays debt', async ({ page }) => {
+  await page.goto('/?debug=1');
+  await page.waitForFunction(() => Boolean(window.__crazyberry));
+
+  const debtLabel = page.locator('[data-testid="hud-debt"]');
+  await expect(debtLabel).toHaveText('0');
+
+  await page.evaluate(() => {
+    const api = window.__crazyberry;
+    const tiles = [
+      [0, 0], [0, 1], [0, 2], [0, 3], [0, 4],
+      [1, 0], [1, 1], [1, 2], [1, 3], [1, 4]
+    ];
+
+    // Spend all initial coins on seeds.
+    for (const [row, col] of tiles) {
+      api.forceTool('hoe');
+      api.performAction(row, col);
+      api.forceTool('seed');
+      api.performAction(row, col);
+    }
+
+    // Clear a small subset to create seed demand while keeping harvest pipeline alive.
+    for (const [row, col] of tiles.slice(0, 2)) {
+      api.forceTool('shovel');
+      api.performAction(row, col);
+    }
+
+    api.forceTool(null);
+    api.setAutoFarmEnabled(true);
+  });
+
+  await page.waitForFunction(() => {
+    const economy = window.__crazyberry.getEconomyState();
+    const cropCount = Object.keys(window.__crazyberry.getState().crops).length;
+    return economy.loanDebtTotal > 0 && (economy.seedCount > 0 || cropCount > 0);
+  });
+
+  const debtAtBorrow = await page.evaluate(() => window.__crazyberry.getEconomyState().loanDebtTotal);
+  expect(debtAtBorrow).toBeGreaterThan(0);
+  await expect(debtLabel).toHaveText(String(debtAtBorrow));
+
+  const repayResult = await page.evaluate((startDebt) => {
+    const api = window.__crazyberry;
+    let debtAfter = api.getEconomyState().loanDebtTotal;
+    for (let i = 0; i < 30; i += 1) {
+      api.simulateTicks(120, 1);
+      debtAfter = api.getEconomyState().loanDebtTotal;
+      if (debtAfter < startDebt) {
+        return { repaid: true, debtAfter };
+      }
+    }
+    return { repaid: false, debtAfter };
+  }, debtAtBorrow);
+
+  expect(repayResult.repaid).toBe(true);
+  const debtAfterRepay = repayResult.debtAfter;
+  expect(debtAfterRepay).toBeLessThan(debtAtBorrow);
+});
+
+test('auto farm avoids unrecoverable deadlock at high speed and engages speed guard', async ({ page }) => {
+  await page.goto('/?debug=1');
+  await page.waitForFunction(() => Boolean(window.__crazyberry));
+
+  await page.evaluate(() => {
+    const api = window.__crazyberry;
+    const tiles = [
+      [0, 0], [0, 1], [0, 2], [0, 3], [0, 4],
+      [1, 0], [1, 1], [1, 2], [1, 3], [1, 4]
+    ];
+
+    for (const [row, col] of tiles) {
+      api.forceTool('hoe');
+      api.performAction(row, col);
+      api.forceTool('seed');
+      api.performAction(row, col);
+    }
+    for (const [row, col] of tiles) {
+      api.forceTool('shovel');
+      api.performAction(row, col);
+    }
+    api.forceTool(null);
+
+    api.setTimeMultiplier(64);
+    api.setAutoFarmEnabled(true);
+    api.simulateTicks(60, 0.2);
+    api.simulateTicks(1200, 0.5);
+  });
+
+  const outcome = await page.evaluate(() => {
+    const economy = window.__crazyberry.getEconomyState();
+    const runtime = window.__crazyberry.getAutoRuntimeState();
+    const snapshot = window.__crazyberry.getState();
+    const cropCount = Object.keys(snapshot.crops).length;
+    const deadlocked = economy.coins < 10 && economy.seedCount === 0 && cropCount === 0;
+
+    return {
+      deadlocked,
+      runtime,
+      autoEnabled: window.__crazyberry.getAutoFarmStatus().enabled
+    };
+  });
+
+  expect(outcome.deadlocked).toBe(false);
+  expect(outcome.autoEnabled).toBe(true);
+  expect(outcome.runtime.timeMultiplier).toBe(1);
+  expect(outcome.runtime.lastSpeedGuardDay).toBeGreaterThan(0);
 });

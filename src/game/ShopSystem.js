@@ -1,4 +1,4 @@
-import { ECONOMY, GRID_ROWS } from '../utils/Constants.js';
+import { AUTO_FARM_POLICY, ECONOMY, GRID_ROWS } from '../utils/Constants.js';
 
 export class ShopSystem {
   constructor({ coins = ECONOMY.START_COINS } = {}) {
@@ -9,6 +9,8 @@ export class ShopSystem {
     this.farmRows = GRID_ROWS;
     this.wateringCanLevel = 1;
     this.totalHarvested = 0;
+    this.loanPrincipal = 0;
+    this.loanInterestAccrued = 0;
   }
 
   addHarvest({ quantity, quality }) {
@@ -58,7 +60,68 @@ export class ShopSystem {
     return true;
   }
 
+  getLoanState() {
+    const principal = Math.max(0, Math.floor(this.loanPrincipal));
+    const interest = Math.max(0, Math.floor(this.loanInterestAccrued));
+    return {
+      principal,
+      interest,
+      totalDebt: principal + interest
+    };
+  }
+
+  getLoanLimit() {
+    const extraRows = Math.max(0, this.farmRows - GRID_ROWS);
+    return AUTO_FARM_POLICY.LOAN_BASE_LIMIT + extraRows * AUTO_FARM_POLICY.LOAN_PER_EXTRA_ROW;
+  }
+
+  borrowCoins(amount) {
+    const requested = Math.max(0, Math.floor(amount));
+    if (requested === 0) return 0;
+
+    const loanState = this.getLoanState();
+    const remainingLimit = Math.max(0, this.getLoanLimit() - loanState.totalDebt);
+    const approved = Math.min(requested, remainingLimit);
+    if (approved <= 0) return 0;
+
+    this.coins += approved;
+    this.loanPrincipal += approved;
+    return approved;
+  }
+
+  accrueLoanInterest(days = 1) {
+    const normalizedDays = Math.max(0, Math.floor(days));
+    if (normalizedDays === 0 || this.loanPrincipal <= 0) return 0;
+
+    const addedInterest = Math.ceil(this.loanPrincipal * AUTO_FARM_POLICY.LOAN_DAILY_RATE * normalizedDays);
+    if (addedInterest <= 0) return 0;
+
+    this.loanInterestAccrued += addedInterest;
+    return addedInterest;
+  }
+
+  repayLoan(maxPayment = Number.POSITIVE_INFINITY) {
+    const paymentCap = Math.max(0, Math.floor(maxPayment));
+    if (paymentCap === 0 || this.coins <= 0) return 0;
+
+    let remaining = Math.min(paymentCap, this.coins);
+    if (remaining <= 0) return 0;
+
+    const interestPaid = Math.min(remaining, this.loanInterestAccrued);
+    this.loanInterestAccrued -= interestPaid;
+    remaining -= interestPaid;
+
+    const principalPaid = Math.min(remaining, this.loanPrincipal);
+    this.loanPrincipal -= principalPaid;
+    remaining -= principalPaid;
+
+    const paidTotal = interestPaid + principalPaid;
+    this.coins -= paidTotal;
+    return paidTotal;
+  }
+
   getEconomyState() {
+    const loanState = this.getLoanState();
     return {
       coins: this.coins,
       seedCount: this.seedCount,
@@ -66,7 +129,10 @@ export class ShopSystem {
       premiumStrawberry: this.premiumStrawberry,
       farmRows: this.farmRows,
       wateringCanLevel: this.wateringCanLevel,
-      totalHarvested: this.totalHarvested
+      totalHarvested: this.totalHarvested,
+      loanPrincipal: loanState.principal,
+      loanInterestAccrued: loanState.interest,
+      loanDebtTotal: loanState.totalDebt
     };
   }
 
@@ -83,6 +149,8 @@ export class ShopSystem {
     this.farmRows = snapshot.farmRows ?? this.farmRows;
     this.wateringCanLevel = snapshot.wateringCanLevel ?? this.wateringCanLevel;
     this.totalHarvested = snapshot.totalHarvested ?? this.totalHarvested;
+    this.loanPrincipal = Math.max(0, Math.floor(snapshot.loanPrincipal ?? this.loanPrincipal ?? 0));
+    this.loanInterestAccrued = Math.max(0, Math.floor(snapshot.loanInterestAccrued ?? this.loanInterestAccrued ?? 0));
     return true;
   }
 }

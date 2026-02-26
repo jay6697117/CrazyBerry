@@ -16,6 +16,7 @@ import { Toolbar } from '../ui/Toolbar.js';
 import { computeMoveVector, Input } from '../utils/Input.js';
 import {
   ACTION_SOUND_TYPES,
+  AUTO_FARM_POLICY,
   CROP_STAGE_THRESHOLDS,
   ECONOMY,
   GRID_COLS,
@@ -105,6 +106,9 @@ export class GameManager {
     this.autoActionCount = 0;
     this.autoTradeCount = 0;
     this.autoArrivalDistance = 0.16;
+    this.autoExpansionPressureDays = 0;
+    this.autoRiskLevel = 'stable';
+    this.autoLastSpeedGuardDay = 0;
     this.player = new Player({ headless: true, speed: 4 });
   }
 
@@ -367,6 +371,7 @@ export class GameManager {
     this.autoTarget = null;
     this.autoActionCooldownSeconds = 0;
     this.autoTradeCooldownSeconds = 0;
+    this.autoRiskLevel = 'stable';
 
     if (nextEnabled) {
       this.manualTool = null;
@@ -398,6 +403,9 @@ export class GameManager {
     this.autoTradeCooldownSeconds = 0;
     this.autoActionCount = 0;
     this.autoTradeCount = 0;
+    this.autoExpansionPressureDays = 0;
+    this.autoRiskLevel = 'stable';
+    this.autoLastSpeedGuardDay = 0;
     this.timeMultiplier = 1;
 
     this.manualTool = null;
@@ -425,20 +433,93 @@ export class GameManager {
   }
 
   countTilledEmptyTiles() {
-    let total = 0;
+    return this.getFieldStats().tilledEmptyCount;
+  }
+
+  getFieldStats() {
+    let activeCropCount = 0;
+    let harvestableCount = 0;
+    let witheredCount = 0;
+    let unwateredGrowingCount = 0;
+    let tilledEmptyCount = 0;
+
     for (let row = 0; row < this.gridSystem.rows; row += 1) {
       for (let col = 0; col < this.gridSystem.cols; col += 1) {
         const tile = this.gridSystem.getTile(row, col);
         if (!tile) continue;
+
+        const crop = this.cropSystem.getCrop(`${row},${col}`);
         if (tile.soilState === 'tilled' && tile.cropId === null) {
-          total += 1;
+          tilledEmptyCount += 1;
+        }
+
+        if (!crop) continue;
+        if (crop.isWithered) {
+          witheredCount += 1;
+          continue;
+        }
+
+        activeCropCount += 1;
+        if (crop.harvestable) {
+          harvestableCount += 1;
+        } else if (!tile.wateredToday) {
+          unwateredGrowingCount += 1;
         }
       }
     }
-    return total;
+
+    return {
+      activeCropCount,
+      harvestableCount,
+      witheredCount,
+      unwateredGrowingCount,
+      tilledEmptyCount,
+      totalTiles: this.gridSystem.rows * this.gridSystem.cols
+    };
   }
 
-  runAutoShopIfNeeded() {
+  updateAutoRiskLevel(fieldStats, economyState) {
+    const noRecoverySignal = (
+      economyState.coins < ECONOMY.SEED_PRICE &&
+      economyState.seedCount === 0 &&
+      fieldStats.activeCropCount === 0
+    );
+    const debtRatio = (economyState.loanDebtTotal ?? 0) / Math.max(1, fieldStats.activeCropCount * 30);
+    const stressed = (
+      noRecoverySignal ||
+      fieldStats.unwateredGrowingCount >= this.gridSystem.cols ||
+      debtRatio > AUTO_FARM_POLICY.MAX_DEBT_TO_REVENUE
+    );
+
+    this.autoRiskLevel = stressed ? 'stressed' : 'stable';
+    return this.autoRiskLevel;
+  }
+
+  applyAutoSpeedGuard(fieldStats) {
+    if (this.timeMultiplier <= 1) return false;
+    const pressureDetected = (
+      fieldStats.unwateredGrowingCount >= this.gridSystem.cols ||
+      this.autoRiskLevel === 'stressed'
+    );
+    if (!pressureDetected) return false;
+
+    this.timeMultiplier = 1;
+    this.autoLastSpeedGuardDay = this.timeSystem.getDayNumber();
+    this.currentHint = 'Auto risk control: speed -> 1x';
+    return true;
+  }
+
+  shouldAttemptAutoExpansion(fieldStats, economyState) {
+    if (this.gridSystem.rows >= GRID_MAX_ROWS) return false;
+    if (this.autoExpansionPressureDays < AUTO_FARM_POLICY.EXPANSION_STREAK_DAYS) return false;
+
+    const borrowNeeded = Math.max(0, ECONOMY.FARM_EXPANSION_PRICE - economyState.coins);
+    const predictedDebt = (economyState.loanDebtTotal ?? 0) + borrowNeeded;
+    const predictedDebtRatio = predictedDebt / Math.max(1, fieldStats.activeCropCount * 30);
+    return predictedDebtRatio <= AUTO_FARM_POLICY.MAX_DEBT_TO_REVENUE;
+  }
+
+  runAutoShopIfNeeded(fieldStats) {
     if (this.autoTradeCooldownSeconds > 0) return;
 
     let changed = false;
@@ -451,30 +532,97 @@ export class GameManager {
       });
       if (sold) {
         changed = true;
+        this.currentHint = 'Auto sold harvest';
         this.autoTradeCount += 1;
       }
     }
 
-    const economyAfterSell = this.shopSystem.getEconomyState();
-    const buyCount = computeSeedPurchaseCount({
-      tilledEmptyCount: this.countTilledEmptyTiles(),
-      seedCount: economyAfterSell.seedCount,
-      coins: economyAfterSell.coins,
-      seedPrice: ECONOMY.SEED_PRICE,
-      maxBuyCount: this.gridSystem.cols
-    });
+    let economyAfterSell = this.shopSystem.getEconomyState();
+    const baseSeedNeed = Math.max(0, fieldStats.tilledEmptyCount - economyAfterSell.seedCount);
+    const targetSeedNeed = baseSeedNeed > 0
+      ? Math.max(baseSeedNeed, AUTO_FARM_POLICY.SEED_MIN_BATCH)
+      : 0;
+    let cappedSeedNeed = Math.min(targetSeedNeed, this.gridSystem.cols);
+    if (economyAfterSell.loanDebtTotal > 0) {
+      cappedSeedNeed = Math.min(cappedSeedNeed, AUTO_FARM_POLICY.SEED_MIN_BATCH);
+    }
 
-    if (buyCount > 0) {
-      const bought = this.shopSystem.buySeed(buyCount);
-      if (bought) {
+    if (cappedSeedNeed > 0) {
+      const seedCost = cappedSeedNeed * ECONOMY.SEED_PRICE;
+      const seedBorrowGap = Math.max(0, seedCost - economyAfterSell.coins);
+      if (seedBorrowGap > 0) {
+        const borrowed = this.shopSystem.borrowCoins(seedBorrowGap);
+        if (borrowed > 0) {
+          changed = true;
+          this.autoTradeCount += 1;
+        }
+      }
+
+      economyAfterSell = this.shopSystem.getEconomyState();
+      const buyCount = computeSeedPurchaseCount({
+        tilledEmptyCount: cappedSeedNeed,
+        seedCount: economyAfterSell.seedCount,
+        coins: economyAfterSell.coins,
+        seedPrice: ECONOMY.SEED_PRICE,
+        maxBuyCount: cappedSeedNeed
+      });
+      if (buyCount > 0) {
+        const bought = this.shopSystem.buySeed(buyCount);
+        if (bought) {
+          changed = true;
+          this.currentHint = `Auto bought ${buyCount} seeds`;
+          this.autoTradeCount += 1;
+        }
+      }
+    }
+
+    let expansionReserve = 0;
+    let economyAfterSeedBuy = this.shopSystem.getEconomyState();
+    const nearExpansionWindow = (
+      this.gridSystem.rows < GRID_MAX_ROWS &&
+      this.autoExpansionPressureDays >= Math.max(0, AUTO_FARM_POLICY.EXPANSION_STREAK_DAYS - 1)
+    );
+    if (nearExpansionWindow) {
+      expansionReserve = ECONOMY.FARM_EXPANSION_PRICE;
+    }
+
+    if (this.shouldAttemptAutoExpansion(fieldStats, economyAfterSeedBuy)) {
+      const expansionBorrowGap = Math.max(0, ECONOMY.FARM_EXPANSION_PRICE - economyAfterSeedBuy.coins);
+      if (expansionBorrowGap > 0) {
+        const borrowed = this.shopSystem.borrowCoins(expansionBorrowGap);
+        if (borrowed > 0) {
+          changed = true;
+          this.autoTradeCount += 1;
+        }
+      }
+
+      const expanded = this.shopSystem.buyFarmExpansion();
+      if (expanded) {
+        this.gridSystem.expandRows(1);
+        this.pendingFieldRefresh = true;
+        this.autoExpansionPressureDays = 0;
+        this.currentHint = 'Auto expanded farm +1 row';
         changed = true;
+        expansionReserve = 0;
+        this.autoTradeCount += 1;
+      }
+    }
+
+    const economyBeforeRepay = this.shopSystem.getEconomyState();
+    const seedBudgetReserve = AUTO_FARM_POLICY.SEED_MIN_BATCH * ECONOMY.SEED_PRICE;
+    const reserveTotal = AUTO_FARM_POLICY.OPERATING_CASH_RESERVE + seedBudgetReserve + expansionReserve;
+    const repayable = Math.max(0, economyBeforeRepay.coins - reserveTotal);
+    if (repayable > 0 && economyBeforeRepay.loanDebtTotal > 0) {
+      const repaid = this.shopSystem.repayLoan(repayable);
+      if (repaid > 0) {
+        changed = true;
+        this.currentHint = `Auto repaid ${repaid}`;
         this.autoTradeCount += 1;
       }
     }
 
     if (changed) {
       this.autoTradeCooldownSeconds = 0.5;
-      this.currentHint = 'Auto traded in shop';
     }
   }
 
@@ -503,22 +651,38 @@ export class GameManager {
     this.autoActionCooldownSeconds = Math.max(0, this.autoActionCooldownSeconds - deltaSeconds);
     this.autoTradeCooldownSeconds = Math.max(0, this.autoTradeCooldownSeconds - deltaSeconds);
 
-    this.runAutoShopIfNeeded();
+    const initialFieldStats = this.getFieldStats();
+    const initialEconomyState = this.shopSystem.getEconomyState();
+    this.updateAutoRiskLevel(initialFieldStats, initialEconomyState);
+    this.applyAutoSpeedGuard(initialFieldStats);
+
+    this.runAutoShopIfNeeded(initialFieldStats);
+
     const economyState = this.shopSystem.getEconomyState();
+    const fieldStats = this.getFieldStats();
+    this.updateAutoRiskLevel(fieldStats, economyState);
 
     const tasks = collectTasks({
       gridSystem: this.gridSystem,
       cropSystem: this.cropSystem,
       playerPosition: this.player.position,
       economyState,
-      seedPrice: ECONOMY.SEED_PRICE
+      seedPrice: ECONOMY.SEED_PRICE,
+      timeRatio: this.timeSystem.getElapsedRatio(),
+      fieldStats,
+      strategyState: {
+        debtOutstanding: economyState.loanDebtTotal > 0,
+        highDebtPressure: economyState.loanDebtTotal > 0 && this.autoRiskLevel === 'stressed'
+      }
     });
     const nextTask = pickNextTask(tasks);
 
     if (!nextTask) {
       this.autoTarget = null;
       this.toolbar.setActiveTool(null);
-      this.currentHint = 'Auto farm waiting for tasks';
+      this.currentHint = this.autoRiskLevel === 'stressed'
+        ? 'Auto risk control'
+        : 'Auto farm waiting for tasks';
       return;
     }
 
@@ -625,7 +789,20 @@ export class GameManager {
     const wateredTileKeys = this.gridSystem.getWateredTileKeys();
     this.cropSystem.advanceDay(this.timeSystem.getDayNumber(), wateredTileKeys);
     this.gridSystem.resetWaterFlags();
-    this.currentHint = `第 ${this.timeSystem.getDayNumber()} 天开始了`;
+
+    const fieldStats = this.getFieldStats();
+    const utilization = fieldStats.activeCropCount / Math.max(1, fieldStats.totalTiles);
+    if (utilization >= AUTO_FARM_POLICY.EXPANSION_UTILIZATION_THRESHOLD) {
+      this.autoExpansionPressureDays += 1;
+    } else {
+      this.autoExpansionPressureDays = 0;
+    }
+
+    const interestAdded = this.shopSystem.accrueLoanInterest(1);
+    const baseHint = `第 ${this.timeSystem.getDayNumber()} 天开始了`;
+    this.currentHint = interestAdded > 0
+      ? `${baseHint} | 贷款计息 +${interestAdded}`
+      : baseHint;
     this.pendingFieldRefresh = true;
     this.saveSystem.save(this.getSnapshot());
   }
@@ -655,6 +832,9 @@ export class GameManager {
     const economyState = this.shopSystem.getEconomyState();
     const strawberryCount = economyState.normalStrawberry + economyState.premiumStrawberry;
     const weather = this.timeSystem.getWeatherState();
+    const statusHint = this.autoFarmEnabled
+      ? `${this.autoRiskLevel === 'stressed' ? 'Auto: risk control' : 'Auto: stable growth'} | ${this.currentHint}`
+      : this.currentHint;
 
     this.hud.setState({
       dayNumber: this.timeSystem.getDayNumber(),
@@ -662,8 +842,9 @@ export class GameManager {
       clockLabel: this.timeSystem.getClockLabel(),
       weatherIcon: weather.icon,
       coins: economyState.coins,
+      debtTotal: economyState.loanDebtTotal ?? 0,
       strawberryCount,
-      hint: this.currentHint,
+      hint: statusHint,
       timeSpeedMultiplier: this.timeMultiplier
     });
 
@@ -728,12 +909,33 @@ export class GameManager {
         this.setAutoFarmEnabled(enabled, 'debug');
         return this.autoFarmEnabled;
       },
+      setTimeMultiplier: (multiplier) => {
+        const value = Math.max(1, Math.min(64, Math.floor(multiplier)));
+        this.timeMultiplier = value;
+        this.syncUi();
+        return this.timeMultiplier;
+      },
+      simulateTicks: (ticks, dt = 0.1) => {
+        const steps = Math.max(0, Math.floor(ticks));
+        const delta = Math.max(0.0001, Number(dt));
+        for (let i = 0; i < steps; i += 1) {
+          this.update(delta);
+        }
+        return this.getSnapshot();
+      },
       getAutoFarmStatus: () => ({
         enabled: this.autoFarmEnabled,
         target: this.autoTarget ? { ...this.autoTarget } : null,
         actionCount: this.autoActionCount,
         tradeCount: this.autoTradeCount
       }),
+      getAutoRuntimeState: () => ({
+        riskLevel: this.autoRiskLevel,
+        expansionPressureDays: this.autoExpansionPressureDays,
+        lastSpeedGuardDay: this.autoLastSpeedGuardDay,
+        timeMultiplier: this.timeMultiplier
+      }),
+      getEconomyState: () => this.shopSystem.getEconomyState(),
       forceTool: (tool) => {
         if (this.autoFarmEnabled) {
           this.setAutoFarmEnabled(false, 'manual');

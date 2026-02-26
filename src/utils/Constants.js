@@ -25,6 +25,20 @@ export const ECONOMY = Object.freeze({
   PREMIUM_RATE: 0.2
 });
 
+export const AUTO_FARM_POLICY = Object.freeze({
+  LOAN_DAILY_RATE: 0.05,
+  LOAN_BASE_LIMIT: 620,
+  LOAN_PER_EXTRA_ROW: 180,
+  OPERATING_CASH_RESERVE: 20,
+  SEED_MIN_BATCH: 2,
+  EXPANSION_UTILIZATION_THRESHOLD: 0.85,
+  EXPANSION_STREAK_DAYS: 2,
+  MAX_DEBT_TO_REVENUE: 0.65,
+  WATER_URGENT_TIME_RATIO: 0.45,
+  HOE_EMPTY_BUFFER_MIN: 2,
+  HOE_EMPTY_BUFFER_MAX: GRID_COLS
+});
+
 export const WEATHER_CYCLE = Object.freeze([
   { code: 'sunny', icon: '☀️' },
   { code: 'cloudy', icon: '☁️' },

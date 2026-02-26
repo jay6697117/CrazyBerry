@@ -6,6 +6,7 @@ export class HUD {
     this.weather = root.querySelector('[data-testid="hud-weather"]');
     this.coins = root.querySelector('[data-testid="hud-coins"]');
     this.strawberry = root.querySelector('[data-testid="hud-strawberry"]');
+    this.debt = root.querySelector('[data-testid="hud-debt"]');
     this.hint = root.querySelector('[data-testid="hud-hint"]');
     this.timeSpeedBtn = root.querySelector('[data-testid="time-speed-btn"]');
 
@@ -14,7 +15,17 @@ export class HUD {
     }
   }
 
-  setState({ dayNumber, phase, clockLabel, weatherIcon, coins, strawberryCount, hint, timeSpeedMultiplier }) {
+  setState({
+    dayNumber,
+    phase,
+    clockLabel,
+    weatherIcon,
+    coins,
+    debtTotal,
+    strawberryCount,
+    hint,
+    timeSpeedMultiplier
+  }) {
     if (this.day) this.day.textContent = `第 ${dayNumber} 天`;
     const phaseMap = { 'Morning': '清晨', 'Noon': '中午', 'Dusk': '黄昏', 'Night': '夜晚' };
     const displayPhase = phaseMap[phase] || phase;
@@ -23,6 +34,7 @@ export class HUD {
     if (this.weather) this.weather.textContent = weatherIcon;
     if (this.coins) this.coins.textContent = `${coins}`;
     if (this.strawberry) this.strawberry.textContent = `${strawberryCount}`;
+    if (this.debt) this.debt.textContent = `${debtTotal ?? 0}`;
     if (this.hint && hint) this.hint.textContent = hint;
     if (this.timeSpeedBtn && timeSpeedMultiplier) {
       this.timeSpeedBtn.textContent = `${timeSpeedMultiplier}x`;

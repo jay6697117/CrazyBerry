@@ -92,6 +92,7 @@ export class GameManager {
     this.pendingFieldRefresh = true;
     this.running = false;
     this.lastTimeMs = 0;
+    this.timeMultiplier = 1;
     this.player = new Player({ headless: true, speed: 4 });
   }
 
@@ -132,7 +133,15 @@ export class GameManager {
       this.cameraForward = new this.THREE.Vector3(0, 0, 1);
 
       this.input = new Input(window, document);
-      this.hud = new HUD(document);
+      this.hud = new HUD(document, {
+        onTimeSpeedUp: () => {
+          this.timeMultiplier *= 2;
+          if (this.timeMultiplier > 64) {
+            this.timeMultiplier = 1;
+          }
+          this.syncUi();
+        }
+      });
       this.toolbar = new Toolbar(document.getElementById('toolbar'));
       this.toolbar.setOnToolSelected((tool) => {
         this.manualTool = tool;
@@ -213,7 +222,12 @@ export class GameManager {
       const dt = Math.min((timeMs - this.lastTimeMs) / 1000, 0.1);
       this.lastTimeMs = timeMs;
       this.update(dt);
-      this.renderer.render(this.scene, this.camera);
+      const composer = this.sceneSetup?.composer;
+      if (composer?.render) {
+        composer.render();
+      } else {
+        this.renderer.render(this.scene, this.camera);
+      }
     });
   }
 
@@ -229,7 +243,7 @@ export class GameManager {
   }
 
   update(deltaSeconds) {
-    const timeState = this.timeSystem.update(deltaSeconds);
+    const timeState = this.timeSystem.update(deltaSeconds * this.timeMultiplier);
     this.updateLighting(timeState.phase);
 
     const movement = this.input.getMovementState();
@@ -422,7 +436,8 @@ export class GameManager {
       weatherIcon: weather.icon,
       coins: economyState.coins,
       strawberryCount,
-      hint: this.currentHint
+      hint: this.currentHint,
+      timeSpeedMultiplier: this.timeMultiplier
     });
 
     this.toolbar.setEconomyState(economyState);

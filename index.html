@@ -105,6 +105,35 @@
         color: var(--hud-muted);
       }
 
+      .hud-phase-row {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+
+      #time-speed-btn {
+        background: rgba(0,0,0,0.06);
+        border: 1px solid rgba(0,0,0,0.1);
+        border-radius: 6px;
+        padding: 1px 6px;
+        font-size: 10px;
+        font-weight: 700;
+        cursor: pointer;
+        color: var(--hud-text);
+        pointer-events: auto;
+        touch-action: manipulation;
+        transition: background 0.15s, transform 0.1s;
+      }
+
+      #time-speed-btn:hover {
+        background: rgba(0,0,0,0.1);
+        transform: scale(1.05);
+      }
+
+      #time-speed-btn:active {
+        transform: scale(0.95);
+      }
+
       [data-testid='hud-weather'] {
         font-size: 30px;
       }
@@ -297,7 +326,10 @@
           <div class="hud-time-card">
             <div class="hud-time-main">
               <div data-testid="hud-clock">06:00 am</div>
-              <div data-testid="hud-phase">Morning</div>
+              <div class="hud-phase-row">
+                <div data-testid="hud-phase">Morning</div>
+                <button id="time-speed-btn" data-testid="time-speed-btn">1x</button>
+              </div>
             </div>
             <div data-testid="hud-weather">☀️</div>
           </div>

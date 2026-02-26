@@ -138,22 +138,16 @@ export async function createSceneSetup(canvas) {
     const renderPass = new RenderPassModule.RenderPass(scene, camera);
     effectComposer.addPass(renderPass);
 
-    // 分辨率, strength, radius, threshold
+    // resolution, strength, radius, threshold
     const bloomPass = new UnrealBloomPassModule.UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.45, // 强度
-      0.8,  // 范围
-      0.65  // 阈值 (只让较亮的部分发光)
+      0.45, // strength
+      0.8,  // radius
+      0.65  // threshold (only brighter areas glow)
     );
     effectComposer.addPass(bloomPass);
 
     composer = effectComposer;
-
-    // 为了向后兼容已有逻辑，覆写一下 renderer 的 render
-    const origRender = renderer.render.bind(renderer);
-    renderer.render = function() {
-      effectComposer.render();
-    };
   } catch(e) {
     console.warn("Post-processing load failed, using basic render.", e);
   }

@@ -1,5 +1,5 @@
 export class HUD {
-  constructor(root = document) {
+  constructor(root = document, { onTimeSpeedUp } = {}) {
     this.day = root.querySelector('[data-testid="hud-day"]');
     this.phase = root.querySelector('[data-testid="hud-phase"]');
     this.clock = root.querySelector('[data-testid="hud-clock"]');
@@ -7,9 +7,14 @@ export class HUD {
     this.coins = root.querySelector('[data-testid="hud-coins"]');
     this.strawberry = root.querySelector('[data-testid="hud-strawberry"]');
     this.hint = root.querySelector('[data-testid="hud-hint"]');
+    this.timeSpeedBtn = root.querySelector('[data-testid="time-speed-btn"]');
+
+    if (this.timeSpeedBtn && onTimeSpeedUp) {
+      this.timeSpeedBtn.addEventListener('click', onTimeSpeedUp);
+    }
   }
 
-  setState({ dayNumber, phase, clockLabel, weatherIcon, coins, strawberryCount, hint }) {
+  setState({ dayNumber, phase, clockLabel, weatherIcon, coins, strawberryCount, hint, timeSpeedMultiplier }) {
     if (this.day) this.day.textContent = `Day ${dayNumber}`;
     if (this.phase) this.phase.textContent = phase;
     if (this.clock) this.clock.textContent = clockLabel;
@@ -17,5 +22,8 @@ export class HUD {
     if (this.coins) this.coins.textContent = `${coins}`;
     if (this.strawberry) this.strawberry.textContent = `${strawberryCount}`;
     if (this.hint && hint) this.hint.textContent = hint;
+    if (this.timeSpeedBtn && timeSpeedMultiplier) {
+      this.timeSpeedBtn.textContent = `${timeSpeedMultiplier}x`;
+    }
   }
 }

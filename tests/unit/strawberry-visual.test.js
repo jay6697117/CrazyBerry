@@ -22,8 +22,13 @@ function createFakeThree() {
     }
     toNonIndexed() { return this; }
     computeVertexNormals() {}
+    computeBoundingBox() {}
+    computeBoundingSphere() {}
     rotateX() { return this; }
+    rotateY() { return this; }
+    rotateZ() { return this; }
     translate() { return this; }
+    clone() { return this; }
   }
 
   class FakeMaterial {
@@ -37,6 +42,22 @@ function createFakeThree() {
       constructor(...args) {
         super('plane', ...args);
       }
+    },
+    ShapeGeometry: class extends FakeGeometry {
+      constructor(...args) {
+        super('shape', ...args);
+      }
+    },
+    ConeGeometry: class extends FakeGeometry {
+      constructor(...args) {
+        super('cone', ...args);
+      }
+    },
+    Shape: class {
+      constructor(points) { this.points = points; }
+      moveTo() {}
+      bezierCurveTo() {}
+      quadraticCurveTo() {}
     },
     CapsuleGeometry: class extends FakeGeometry {
       constructor(...args) {
@@ -56,12 +77,21 @@ function createFakeThree() {
     Vector2: class {
       constructor(x, y) { this.x = x; this.y = y; }
     },
+    Vector2: class {
+      constructor(x, y) { this.x = x; this.y = y; }
+    },
     CanvasTexture: class {
       constructor() {}
     },
     MeshBasicMaterial: class extends FakeMaterial {},
     MeshStandardMaterial: class extends FakeMaterial {},
     MeshPhysicalMaterial: class extends FakeMaterial {},
+    BufferGeometryUtils: {
+      mergeGeometries: (arr, useGroups) => {
+        if (useGroups) return [arr[0] || new FakeGeometry('merged'), new FakeGeometry('merged'), new FakeGeometry('merged')];
+        return arr[0] || new FakeGeometry('merged');
+      }
+    },
     DoubleSide: 'double-side'
   };
 }
@@ -80,7 +110,7 @@ test('stage visual factory reuses geometry and material handles', () => {
   const second = createStageVisualFactory(THREE);
 
   assert.equal(first, second);
-  assert.equal(first.geometries[STRAWBERRY_STAGE.SEED], second.geometries[STRAWBERRY_STAGE.SEED]);
-  assert.equal(first.materials[STRAWBERRY_STAGE.FRUIT], second.materials[STRAWBERRY_STAGE.FRUIT]);
-  assert.notEqual(first.geometries[STRAWBERRY_STAGE.SEED], first.geometries[STRAWBERRY_STAGE.SPROUT]);
+  assert.equal(first[STRAWBERRY_STAGE.SEED].geometry, second[STRAWBERRY_STAGE.SEED].geometry);
+  assert.equal(first[STRAWBERRY_STAGE.FRUIT].materials[1], second[STRAWBERRY_STAGE.FRUIT].materials[1]);
+  assert.notEqual(first[STRAWBERRY_STAGE.SEED].geometry, first[STRAWBERRY_STAGE.SPROUT].geometry);
 });

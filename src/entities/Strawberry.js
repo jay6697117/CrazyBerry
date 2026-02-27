@@ -219,15 +219,22 @@ export function createStageVisualFactory(THREE) {
     color: 0xe61219, roughness: 0.2, metalness: 0.05,
     clearcoat: 1.0, clearcoatRoughness: 0.1
   });
-  const matSeedSoil = new THREE.MeshStandardMaterial({ color: 0xb58c5a, roughness: 0.9 });
+  // 将种子的颜色设置得更亮一些，类似浅黄色/浅卡其色，方便与深色土壤区分
+  const matSeedSoil = new THREE.MeshStandardMaterial({ color: 0xe2c68f, roughness: 0.9 });
 
-  // 1. 种子阶段
-  const seedGeo = new THREE.CapsuleGeometry(0.03, 0.05, 8, 8);
-  seedGeo.rotateX(Math.PI/2); seedGeo.translate(0, 0.03, 0);
+  // 1. 种子阶段：为了在宏观视角能清楚看到，这里将种子进行了夸张的放大，并呈现三颗聚堆的形态
+  const singleSeedGeo = new THREE.CapsuleGeometry(0.12, 0.2, 8, 8);
+  singleSeedGeo.rotateX(Math.PI/2);
+
+  const s1 = singleSeedGeo.clone().translate(0, 0, 0.15);
+  const s2 = singleSeedGeo.clone().rotateY(Math.PI * 0.6).translate(0.12, 0, -0.05);
+  const s3 = singleSeedGeo.clone().rotateY(-Math.PI * 0.6).translate(-0.12, 0, -0.05);
+
+  const seedGeo = THREE.BufferGeometryUtils.mergeGeometries([s1, s2, s3], false);
   const visualSeed = { geometry: seedGeo, materials: [matSeedSoil] };
 
   // 2. 幼苗阶段 (嫩绿小复叶)
-  const sproutGeo = createPlantRosette(THREE, 3, 0.15, 0.8);
+  const sproutGeo = createPlantRosette(THREE, 3, 0.25, 0.8);
   const visualSprout = { geometry: sproutGeo, materials: [matSprout] };
 
   // 3. 生长阶段 (大丛的墨绿叶片)
@@ -256,8 +263,8 @@ export function createStageVisualFactory(THREE) {
   rStem.rotateX(Math.PI/4); // 沉甸甸下垂
   rParts.forEach(p => { p.rotateX(Math.PI/4); p.translate(0, 0.35*Math.cos(Math.PI/4), 0.35*Math.sin(Math.PI/4)); });
 
-  const greenPartsR = BufferGeometryUtils.mergeGeometries([fruitLeaves, rStem, rParts[0]], false);
-  const fruitMultiGeo = BufferGeometryUtils.mergeGeometries([greenPartsR, rParts[1]], true);
+  const greenPartsR = THREE.BufferGeometryUtils.mergeGeometries([fruitLeaves, rStem, rParts[0]], false);
+  const fruitMultiGeo = THREE.BufferGeometryUtils.mergeGeometries([greenPartsR, rParts[1]], true);
   const visualFruit = { geometry: fruitMultiGeo, materials: [matLeave, matFruitRed] };
 
   const visuals = {

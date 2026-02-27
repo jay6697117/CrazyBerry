@@ -2,6 +2,7 @@ const THREE_MODULE_URL = 'https://unpkg.com/three@0.160.0/build/three.module.js'
 const COMPOSER_URL = 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
 const RENDER_PASS_URL = 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
 const BLOOM_PASS_URL = 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+const BGU_URL = 'https://unpkg.com/three@0.160.0/examples/jsm/utils/BufferGeometryUtils.js';
 
 let threePromise;
 let composerLoaders;
@@ -12,7 +13,14 @@ export function getRendererPixelRatioCap(devicePixelRatio) {
 
 export async function loadThreeModule() {
   if (!threePromise) {
-    threePromise = import('three');
+    threePromise = Promise.all([
+      import('three'),
+      import(BGU_URL)
+    ]).then(([threeModule, bguModule]) => {
+      const THREE = { ...threeModule };
+      THREE.BufferGeometryUtils = bguModule;
+      return THREE;
+    });
   }
   return threePromise;
 }

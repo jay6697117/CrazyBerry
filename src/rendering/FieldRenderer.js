@@ -23,7 +23,7 @@ const TILE_COLORS = {
 };
 
 const STAGE_SCALE = {
-  seed: 1.0,
+  seed: 3.0,
   sprout: 1.0,
   growth: 1.0,
   flower: 1.0,
@@ -32,12 +32,12 @@ const STAGE_SCALE = {
 };
 
 const STAGE_Y = {
-  seed: 0.13,
-  sprout: 0.13,
-  growth: 0.13,
-  flower: 0.13,
-  fruit: 0.13,
-  withered: 0.13
+  seed: 0.35,
+  sprout: 0.32,
+  growth: 0.35,
+  flower: 0.35,
+  fruit: 0.35,
+  withered: 0.35
 };
 
 function cropStageToKey(crop) {
